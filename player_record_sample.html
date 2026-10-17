@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="description" content="대한핸드볼협회 사이트 입니다.">
+    <meta property="og:title" content="대한핸드볼협회" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="http://khf.handballkorea.com/" /> 
+    <meta property="og:image" content="사이트이미지" />
+    <meta property="og:description" content="대한핸드볼협회 사이트 입니다." />
+    <title>대한핸드볼협회</title>
+    <!-- favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="/static/images/favicon/site.webmanifest">
+    <link rel="mask-icon" href="/static/images/favicon/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="theme-color" content="#ffffff">
+
+    <link rel="stylesheet" href="/static/css/import.css?ver=260518">
+    <script type="text/javascript" src="/static/js/jquery-1.12.4.min.js"></script>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W6HRJGSBG0"></script>
+    <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-W6HRJGSBG0');
+    gtag('event', 'page_view', { 'send_to': 'G-W6HRJGSBG0' });
+    </script>
+</head>
+
+<body>
+    <div id="wrapper" class="sub competition">
+        <!-- header -->
+		<header>
+    <div class="lg_inner">
+        <div class="inner">
+            <a href="/" class="logo">
+                <img src="/static/images/logo.png" data-desktop="/static/images/logo.png" data-mobile="/static/images/logo_mo.png" alt="대한핸드볼협회">
+            </a>
+
+            <!-- gnb open button mobile_only -->
+            <button type="button" class="btn_gnb mo_only">
+                <span class="icon"></span>
+                <span class="sr_only">열기</span>
+            </button>
+
+            <!-- gnb -->
+            <div class="gnb_wrap">
+                <div class="mo_top mo_only">
+                    <a href="/" class="logo">
+                        <img src="/static/images/logo_mo_w.png" alt="대한핸드볼협회">
+                    </a>
+
+                    <!-- mobile menu btn -->
+                    <button type="button" class="btn_close">
+                        <span class="icon"></span>
+                        <span class="sr_only">닫기</span>
+                    </button>
+                </div>
+                <!-- user nav -->
+                <div class="user_nav">
+                    <ul class="list_iblock">
+                        <li class="hkl">
+                            <a href="https://koreahandball.com/" target="_blank">
+                                <span class="icon"></span>
+                                <span class="mo_only">연맹</span>
+                            </a>
+                        </li>
+						                            <li class="login">
+                                <a href="https://www.handballkorea.com/member/login.php" class="go_unity">
+                                    <span class="icon"></span>
+                                    <span class="mo_only">로그인</span>
+                                </a>
+                            </li>
+                            <li class="join">
+                                <a href="https://www.handballkorea.com/member/agree.php" class="go_unity">
+                                    <span class="icon"></span>
+                                    <span class="mo_only">회원가입</span>
+                                </a>
+                            </li>
+						                    </ul>
+                </div>
+
+                <!-- web -->
+                <div class="gnb pc_only">
+                    <ul class="depth01">
+						                            <li>
+                                <a href="/khf/greetings.php">KHF</a>
+																	<ul class="depth02">
+										<li><a href="/khf/greetings.php">인사말</a></li><li><a href="/khf/introduce.php">핸드볼이란?</a></li><li><a href="/khf/history.php">연혁</a></li><li><a href="/khf/organizationchart.php">조직도</a></li><li><a href="/khf/executive.php">임원소개</a></li><li><a href="/khf/regulations.php">정관/규정</a></li><li><a href="/khf/tournament.php">연간일정</a></li><li><a href="/khf/emblem.php">앰블럼&amp;마스코트</a></li><li><a href="/khf/address.php">찾아오시는길</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/members/integrated_search.php">선수/지도자</a>
+																	<ul class="depth02">
+										<li><a href="/members/integrated_search.php">선수통합검색안내</a></li><li><a href="https://g1.sports.or.kr/index.do" target="_blank">경기인등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/national/schedule_list.php">국가대표</a>
+																	<ul class="depth02">
+										<li><a href="/national/schedule_list.php">국제대회 일정/결과</a></li><li><a href="/national/member_list.php">국가대표명단</a></li><li><a href="/national/contry_score.php">나라별 전적 조회</a></li><li><a href="/national/history.php">국가대표역대결과</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/competition/schedule_list.php">국내대회</a>
+																	<ul class="depth02">
+										<li><a href="/competition/schedule_list.php">국내대회 일정/결과</a></li><li><a href="/competition/schedule_list_etc.php">기타 국내대회 일정/결과</a></li><li><a href="/competition/information.php">역대대회결과</a></li><li><a href="https://result.sports.or.kr/HB/INF001.do" target="_blank">대회 참가신청</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/medianews/notice_list.php">뉴스&미디어</a>
+																	<ul class="depth02">
+										<li><a href="/medianews/notice_list.php">공지사항</a></li><li><a href="/medianews/news_list.php">뉴스</a></li><li><a href="/medianews/report_list.php">보도자료</a></li><li><a href="/medianews/media_list.php">KHF영상</a></li><li><a href="/medianews/photo_list.php">KHF포토</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/data/list.php">자료실</a>
+																	<ul class="depth02">
+										<li><a href="/data/list.php">자료실</a></li><li><a href="/data/magazine.php">핸드볼코리아매거진</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/club/khf_club.php">핸드볼클럽</a>
+																	<ul class="depth02">
+										<li><a href="/club/khf_club.php">핸드볼클럽</a></li><li><a href="/club/lesson_schedule.php">수업일정</a></li><li><a href="/club/lesson_plan.php">수업계획</a></li><li><a href="/club/lesson_objective.php">수업목표</a></li><li><a href="/club/park_tour.php">올림픽공원투어</a></li><li><a href="/club/apply_list.php">강습신청</a></li><li><a href="/club/application_list.php">나의 수강 내역</a></li><li><a href="/club/children_apply.php">학부모/자녀등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/fan/comment.php">FAN</a>
+																	<ul class="depth02">
+										<li><a href="/fan/comment.php">한줄응원메시지</a></li><li><a href="/fan/event.php">EVENT</a></li><li><a href="/fan/supporters_info.php">서포터즈 가입</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/hka/academy.php">핸드볼아카데미</a>
+																	<ul class="depth02">
+										<li><a href="/hka/academy.php">핸드볼아카데미</a></li><li><a href="/hka/leader.php">지도자 분과</a></li><li><a href="/hka/topplayer.php">우수선수 분과</a></li><li><a href="/hka/referee.php">심판 분과</a></li><li><a href="/hka/analysis.php">분석 분과</a></li>									</ul>
+									                            </li>
+							                    </ul>
+                </div>
+
+                <!-- mobile -->
+                <div class="gnb mo_only">
+                    <ul class="depth01">
+						                            <li>
+                                <a href="javascript:void(0);">KHF</a>
+																	<ul class="depth02">
+										<li><a href="/khf/greetings.php">인사말</a></li><li><a href="/khf/introduce.php">핸드볼이란?</a></li><li><a href="/khf/history.php">연혁</a></li><li><a href="/khf/organizationchart.php">조직도</a></li><li><a href="/khf/executive.php">임원소개</a></li><li><a href="/khf/regulations.php">정관/규정</a></li><li><a href="/khf/tournament.php">연간일정</a></li><li><a href="/khf/emblem.php">앰블럼&amp;마스코트</a></li><li><a href="/khf/address.php">찾아오시는길</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">선수/지도자</a>
+																	<ul class="depth02">
+										<li><a href="/members/integrated_search.php">선수통합검색안내</a></li><li><a href="https://g1.sports.or.kr/index.do" target="_blank">경기인등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">국가대표</a>
+																	<ul class="depth02">
+										<li><a href="/national/schedule_list.php">국제대회 일정/결과</a></li><li><a href="/national/member_list.php">국가대표명단</a></li><li><a href="/national/contry_score.php">나라별 전적 조회</a></li><li><a href="/national/history.php">국가대표역대결과</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">국내대회</a>
+																	<ul class="depth02">
+										<li><a href="/competition/schedule_list.php">국내대회 일정/결과</a></li><li><a href="/competition/schedule_list_etc.php">기타 국내대회 일정/결과</a></li><li><a href="/competition/information.php">역대대회결과</a></li><li><a href="https://result.sports.or.kr/HB/INF001.do" target="_blank">대회 참가신청</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">뉴스&미디어</a>
+																	<ul class="depth02">
+										<li><a href="/medianews/notice_list.php">공지사항</a></li><li><a href="/medianews/news_list.php">뉴스</a></li><li><a href="/medianews/report_list.php">보도자료</a></li><li><a href="/medianews/media_list.php">KHF영상</a></li><li><a href="/medianews/photo_list.php">KHF포토</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">자료실</a>
+																	<ul class="depth02">
+										<li><a href="/data/list.php">자료실</a></li><li><a href="/data/magazine.php">핸드볼코리아매거진</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">핸드볼클럽</a>
+																	<ul class="depth02">
+										<li><a href="/club/khf_club.php">핸드볼클럽</a></li><li><a href="/club/lesson_schedule.php">수업일정</a></li><li><a href="/club/lesson_plan.php">수업계획</a></li><li><a href="/club/lesson_objective.php">수업목표</a></li><li><a href="/club/park_tour.php">올림픽공원투어</a></li><li><a href="/club/apply_list.php">강습신청</a></li><li><a href="/club/application_list.php">나의 수강 내역</a></li><li><a href="/club/children_apply.php">학부모/자녀등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">FAN</a>
+																	<ul class="depth02">
+										<li><a href="/fan/comment.php">한줄응원메시지</a></li><li><a href="/fan/event.php">EVENT</a></li><li><a href="/fan/supporters_info.php">서포터즈 가입</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">핸드볼아카데미</a>
+																	<ul class="depth02">
+										<li><a href="/hka/academy.php">핸드볼아카데미</a></li><li><a href="/hka/leader.php">지도자 분과</a></li><li><a href="/hka/topplayer.php">우수선수 분과</a></li><li><a href="/hka/referee.php">심판 분과</a></li><li><a href="/hka/analysis.php">분석 분과</a></li>									</ul>
+									                            </li>
+							                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="gnb_bg"></div>
+</header>        <!-- //header -->
+
+        <!-- //container -->
+        <div id="container">
+			
+<h1 class="sr_only">국내대회 일정/결과</h1>
+<!-- sub 공통 -->
+<!-- sub_top -->
+<div class="sub_top">
+    <h2 class="page_name">국내대회 일정/결과</h2>
+    <ul class="page_breadcrumb">
+        <li>H</li>
+        <li>국내대회</li>
+        <li>국내대회 일정/결과</li>    </ul>
+</div>
+<!-- breadcrumb -->
+<div class="breadcrumb">
+    <ul class="cont_inner clearfix">
+        <li class="home"><a href="javascript:void(0);"><span class="icon"></span></a></li>
+        <li class="page_select">
+            <a href="javascript:void(0);">국내대회</a>
+            <ul class="depth02">
+				                    <li class=""><a href="/khf/greetings.php">KHF</a></li>
+                                        <li class=""><a href="javascript:alert('선수/지도자/팀 검색 시스템 점검중입니다.');">선수/지도자</a></li>
+                                        <li class=""><a href="/national/schedule_list.php">국가대표</a></li>
+                                        <li class="active"><a href="/competition/schedule_list.php">국내대회</a></li>
+                                        <li class=""><a href="/medianews/notice_list.php">뉴스&미디어</a></li>
+                                        <li class=""><a href="/data/list.php">자료실</a></li>
+                                        <li class=""><a href="/club/khf_club.php">핸드볼클럽</a></li>
+                                        <li class=""><a href="/fan/comment.php">FAN</a></li>
+                                        <li class=""><a href="/hka/academy.php">핸드볼아카데미</a></li>
+                                </ul>
+        </li>
+		            <li class="page_select">
+                <a href="javascript:void(0);">국내대회 일정/결과</a>
+                <ul class="depth02">
+					                        <li class="active"><a href="/competition/schedule_list.php">국내대회 일정/결과</a></li>
+                                                <li class=""><a href="/competition/schedule_list_etc.php">기타 국내대회 일정/결과</a></li>
+                                                <li class=""><a href="/competition/information.php">역대대회결과</a></li>
+                                                <li class=""><a href="https://result.sports.or.kr/HB/INF001.do">대회 참가신청</a></li>
+                                        </ul>
+            </li>
+			    </ul>
+</div>
+<!-- //sub 공통 -->            <div id="contents" class="">    <section class="sub_inner">
+        <div class="compare_top">
+    <div class="txt_center">
+        <p class="txt_light">
+            2026.08.18 () :        </p>
+        <p></p>
+        <p></p>
+    </div>
+    <div class="vs_style main">
+        <div class="team home ">
+            <span class="name"></span>
+            <span class="number"></span>
+        </div>
+        <div class="center">
+            <div class="inner">
+                <div class="vs_style sub">
+                    <div class="team home">
+                        <span class="name"></span>
+                    </div>
+                    <div class="center">
+                        전반전
+                    </div>
+                    <div class="team away">
+                        <span class="name"></span>
+                    </div>
+                </div>
+                <div class="vs_style sub">
+                    <div class="team home">
+                        <span class="name"></span>
+                    </div>
+                    <div class="center">
+                        후반전
+                    </div>
+                    <div class="team away">
+                        <span class="name"></span>
+                    </div>
+                </div>
+
+                <!--2022-10-11 연장1/연장2/패널티 추가-->
+                                <!--//2022-10-11 연장1/연장2/패널티 추가-->
+            </div>
+        </div>
+        <div class="team away ">
+            <span class="number"></span>
+            <span class="name"></span>
+        </div>
+    </div>
+</div>
+
+<!-- 탭메뉴 -->
+<div class="sub_tab_menu">
+    <ul>
+        <li><a href="detail_new.php?GAME_CD=20240818130004">양팀비교</a></li>
+        <li class="active"><a href="detail_player_record_new.php?GAME_CD=20240818130004">선수기록</a></li>
+    </ul>
+</div>
+        <!-- 양팀비교 차트 -->
+        <div class="compare_chart player">
+            <div class="game_score">
+                <div class="team home">
+                    <span class="name"></span>
+                </div>
+                <div class="score">VS</div>
+                <div class="team away">
+                    <span class="name"></span>
+                </div>
+            </div>
+
+            <div class="compare_circle">
+                
+                <div class="inner">
+                    <div class="cont_wrap home">
+                        <h4 class="player_name"> / </h4>
+                        <div class="graph">
+                                                                <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">득점</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                                        <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">어시스트</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                                        <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">공격포인트</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                            </div>
+                    </div>
+                    <div class="cont_wrap away">
+                        <h4 class="player_name"> / </h4>
+                        <div class="graph">
+                                                                <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">득점</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                                        <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">어시스트</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                                        <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">공격포인트</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                            </div>
+                    </div>
+                </div>
+                <div class="inner">
+                    <div class="cont_wrap home">
+                        <h4 class="player_name"> / GK</h4>
+                        <div class="graph">
+                                                                <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">세이브</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                                        <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">방어율</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                            </div>
+                    </div>
+                    <div class="cont_wrap away">
+                        <h4 class="player_name"> / GK</h4>
+                        <div class="graph">
+                                                                <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">세이브</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                                        <div class="cont">
+                                        <div class="chart_wrap">
+                                            <div class="single-chart">
+                                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                                    <path class="circle-bg" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                    <!-- stroke-dasharray="숫자, 100" -->
+                                                    <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845
+                    a 15.9155 15.9155 0 0 1 0 31.831
+                    a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="text">
+                                                <div class="team">
+                                                    <div class="percentage"></div>
+                                                    <div class="name">방어율</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                                            </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="sub_cont">
+            <div class="record_table">
+                <h3 class="con_title"></h3>
+                <div class="table_wrap record">
+                    <!-- 용어설명 팝업 버튼 -->
+                    <a href="javascript:void(0);" class="btn_popup" data-popup="popup_record">
+                        <span class="icon"></span>용어설명
+                    </a>
+
+                    <!-- 용어설명 팝업 -->
+                    <div class="popup_wrap popup_record" data-popup="popup_record">
+                        <div class="inner">
+                            <div class="contents_wrap">
+                                <div class="top_wrap">
+                                    <p class="title">용어설명</p>
+                                    <button type="button" class="btn_close_popup">
+                                        <span class="icon"></span>
+                                    </button>
+                                </div>
+                                <div class="cont">
+                                    <ul>
+                                        <li>6PM : 6PM득점</li>
+                                        <li>2MIN : 2분퇴장</li>
+                                        <li>Wing : 윙 득점</li>
+                                        <li>RC : 레드카드</li>
+                                        <li>9PM : 9PM득점</li>
+                                        <li>DR : 블루카드</li>
+                                        <li>7PM : 7PM득점</li>
+                                        <li>RUN : 러닝타임</li>
+                                        <li>FB : 속공</li>
+                                        <li>RB : 리바운드</li>
+                                        <li>BT : 돌파득점</li>
+                                        <li>Total shoots : 슛성공률</li>
+                                        <li>AS : 어시스트</li>
+                                        <li>6PM shoots : 6m성공률</li>
+                                        <li>TF : 실책</li>
+                                        <li>Wing shoots : 윙슛성공률</li>
+                                        <li>ST : 스틸</li>
+                                        <li>9PM shoots : 9m성공률</li>
+                                        <li>BS : 블록슛</li>
+                                        <li>7PM shoots : 7m성공률</li>
+                                        <li>YC : 옐로우카드</li>
+                                        <li>Fast shoots : 속공성공률</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 고정테이블 -->
+                    <div class="fixed_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">경기일정/결과 선수기록(선수/선수명)</caption>
+                            <colgroup>
+                                <col>
+                                <col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="2">Player</th>
+                            </tr>
+                            <tr>
+                                <th>No</th>
+                                <th>Name</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+
+                    <div class="scroll_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">개인 시즌별 기록(기록)</caption>
+                            <colgroup>
+                                <col><col><col><col><col><col><col><col><col><col>
+                                <col><col><col><col><col><col><col><col><col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="8">Shots</th>
+                                <th colspan="3">Offence</th>
+                                <th colspan="2">Deffence</th>
+                                <th rowspan="2">RB</th>
+                                <th colspan="4">Punishments</th>
+                                <th rowspan="2">Run</th>
+                            </tr>
+                            <tr>
+                                <th>G/S</th>
+                                <th>%</th>
+                                <th>6m</th>
+                                <th>Wing</th>
+                                <th>9m</th>
+                                <th>7m</th>
+                                <th>FB</th>
+                                <th>BT</th>
+                                <th>AS</th>
+                                <th>TF</th>
+                                <th>BD</th>
+                                <th>BS</th>
+                                <th>ST</th>
+                                <th>YC</th>
+                                <th>2min</th>
+                                <th>RC</th>
+                                <th class="line">DR</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+                </div>
+
+
+                <br><br>
+                <h3 class="con_title">골키퍼</h3>
+                <div class="table_wrap record">
+
+                    <!-- 고정테이블 -->
+                    <div class="fixed_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">경기일정/결과 선수기록(선수/선수명)</caption>
+                            <colgroup>
+                                <col>
+                                <col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="2">Player</th>
+                            </tr>
+                            <tr>
+                                <th>No</th>
+                                <th>Name</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+
+                    <div class="scroll_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">개인 시즌별 기록(기록)</caption>
+                            <colgroup>
+                                <col><col><col><col>
+                                <col><col><col><col><col><col>
+                                <col><col><col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="4">기본기록</th>
+                                <th colspan="6">유형별 방어율</th>
+                                <th colspan="3">위치별 방어율</th>
+                            </tr>
+                            <tr>
+                                <th>방어율</th><th>SV</th><th>GKG</th><th>GKAS</th>
+                                <th>Wing</th><th>6m</th><th>9m</th><th>7m</th><th>FB</th><th>BT</th>
+                                <th>High</th><th>Mid</th><th>Low</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="sub_cont no_pad">
+            <div class="record_table">
+                <h3 class="con_title"></h3>
+                <div class="table_wrap record">
+                    <!-- 고정테이블 -->
+                    <div class="fixed_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">경기일정/결과 선수기록(선수/선수명)</caption>
+                            <colgroup>
+                                <col>
+                                <col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="2">Player</th>
+                            </tr>
+                            <tr>
+                                <th>No</th>
+                                <th>Name</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+
+                    <div class="scroll_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">개인 시즌별 기록(기록)</caption>
+                            <colgroup>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="8">Shots</th>
+                                <th colspan="3">Offence</th>
+                                <th colspan="2">Deffence</th>
+                                <th rowspan="2">RB</th>
+                                <th colspan="4">Punishments</th>
+                                <th rowspan="2">Run</th>
+                            </tr>
+                            <tr>
+                                <th>G/S</th>
+                                <th>%</th>
+                                <th>6m</th>
+                                <th>Wing</th>
+                                <th>9m</th>
+                                <th>7m</th>
+                                <th>FB</th>
+                                <th>BT</th>
+                                <th>AS</th>
+                                <th>TF</th>
+                                <th>BD</th>
+                                <th>BS</th>
+                                <th>ST</th>
+                                <th>YC</th>
+                                <th>2min</th>
+                                <th>RC</th>
+                                <th class="line">DR</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+                </div>
+
+
+                <br><br>
+                <h3 class="con_title">골키퍼</h3>
+                <div class="table_wrap record">
+
+                    <!-- 고정테이블 -->
+                    <div class="fixed_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">경기일정/결과 선수기록(선수/선수명)</caption>
+                            <colgroup>
+                                <col>
+                                <col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="2">Player</th>
+                            </tr>
+                            <tr>
+                                <th>No</th>
+                                <th>Name</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+
+                    <div class="scroll_table">
+                        <table class="txt_center">
+                            <caption class="sr_only">개인 시즌별 기록(기록)</caption>
+                            <colgroup>
+                                <col><col><col><col>
+                                <col><col><col><col><col><col>
+                                <col><col><col>
+                            </colgroup>
+                            <thead>
+                            <tr>
+                                <th colspan="4">기본기록</th>
+                                <th colspan="6">유형별 방어율</th>
+                                <th colspan="3">위치별 방어율</th>
+                            </tr>
+                            <tr>
+                                <th>방어율</th><th>SV</th><th>GKG</th><th>GKAS</th>
+                                <th>Wing</th><th>6m</th><th>9m</th><th>7m</th><th>FB</th><th>BT</th>
+                                <th>High</th><th>Mid</th><th>Low</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                                                        </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+    <script>
+        $(function () {
+            //popup
+            $('.btn_popup').on('click', function (e) {
+                e.preventDefault();
+                var popupSrc = $(this).attr('data-popup');
+                $('.popup_wrap[data-popup=' + popupSrc + ']').addClass('active');
+            });
+            $('.popup_wrap .btn_close_popup').on('click', function () {
+                $(this).parents('.popup_wrap').removeClass('active');
+            });
+        });
+    </script>
+        </div>
+    </div>
+    <!-- //container -->
+
+            
+                    <footer>
+                <div class="inner">
+                    <ul class="list_iblock line">
+                        <li><a href="/khf/regulations.php">정관/규정</a></li>
+                        <li><a href="/privacy.php" class="font_white">개인정보처리방침</a></li>
+                    </ul>
+                    <p>
+                        서울특별시 송파구 올림픽로 424 SK핸드볼경기장 3층 <span class="mo_br"></span>사업자번호 215-82-02004 T
+                        02-6200-1414 F
+                        02-420-5337 <span class="mo_br"></span>E-Mail&nbsp;handball_pr@sports.or.kr<br>
+                        COPYRIGHT ⓒ 대한핸드볼협회 ALL RIGHTS RESERVED
+                    </p>
+                    <div class="form_wrap select">
+                        <select onchange="if(this.value !== 'none') window.open(this.value,'_blank');">
+                            <option value="none">관련사이트</option>
+                            <option value="https://www.mcst.go.kr/kor/main.jsp">문화체육관광부</option>
+                            <option value="https://www.sports.or.kr/index.do">대한체육회</option>
+                            <option value="https://www.ihf.info/">국제핸드볼연맹</option>
+                            <option value="http://www.asianhandball.com/">아시아핸드볼연맹</option>
+                        </select>
+                    </div>
+                </div>
+            </footer>
+            
+        <a href="javascript:void(0);" class="btn_top"><span class="icon"></span>TOP</a>
+    </div>
+
+    <!-- 공통 script -->
+    <script type="text/javascript" src="/static/js/common.js"></script>
+    <!-- //공통 script -->
+
+	<script type="text/javascript">
+	$(function () {
+		$('a.go_unity').on('click',function(){
+            var this_alert_msg = $(this).attr('alert_mas');
+            if($.trim(this_alert_msg)){
+                alert(this_alert_msg);
+            }
+
+			location.href='/go_unity.php?url='+$(this).attr('href');
+			return false;
+		});
+	});
+	</script>
+</body>
+
+</html>

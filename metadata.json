@@ -1,0 +1,6 @@
+{
+  "name": "대한핸드볼협회 경기 일정 및 결과",
+  "description": "대한핸드볼협회 공식 웹사이트의 경기 일정과 결과를 크롤링하여 모바일 환경에 최적화된 디자인으로 보여주는 앱입니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

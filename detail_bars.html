@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="description" content="대한핸드볼협회 사이트 입니다.">
+    <meta property="og:title" content="대한핸드볼협회" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="http://khf.handballkorea.com/" /> 
+    <meta property="og:image" content="사이트이미지" />
+    <meta property="og:description" content="대한핸드볼협회 사이트 입니다." />
+    <title>대한핸드볼협회</title>
+    <!-- favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="/static/images/favicon/site.webmanifest">
+    <link rel="mask-icon" href="/static/images/favicon/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="theme-color" content="#ffffff">
+
+    <link rel="stylesheet" href="/static/css/import.css?ver=260518">
+    <script type="text/javascript" src="/static/js/jquery-1.12.4.min.js"></script>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W6HRJGSBG0"></script>
+    <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-W6HRJGSBG0');
+    gtag('event', 'page_view', { 'send_to': 'G-W6HRJGSBG0' });
+    </script>
+</head>
+
+<body>
+    <div id="wrapper" class="sub competition">
+        <!-- header -->
+		<header>
+    <div class="lg_inner">
+        <div class="inner">
+            <a href="/" class="logo">
+                <img src="/static/images/logo.png" data-desktop="/static/images/logo.png" data-mobile="/static/images/logo_mo.png" alt="대한핸드볼협회">
+            </a>
+
+            <!-- gnb open button mobile_only -->
+            <button type="button" class="btn_gnb mo_only">
+                <span class="icon"></span>
+                <span class="sr_only">열기</span>
+            </button>
+
+            <!-- gnb -->
+            <div class="gnb_wrap">
+                <div class="mo_top mo_only">
+                    <a href="/" class="logo">
+                        <img src="/static/images/logo_mo_w.png" alt="대한핸드볼협회">
+                    </a>
+
+                    <!-- mobile menu btn -->
+                    <button type="button" class="btn_close">
+                        <span class="icon"></span>
+                        <span class="sr_only">닫기</span>
+                    </button>
+                </div>
+                <!-- user nav -->
+                <div class="user_nav">
+                    <ul class="list_iblock">
+                        <li class="hkl">
+                            <a href="https://koreahandball.com/" target="_blank">
+                                <span class="icon"></span>
+                                <span class="mo_only">연맹</span>
+                            </a>
+                        </li>
+						                            <li class="login">
+                                <a href="https://www.handballkorea.com/member/login.php" class="go_unity">
+                                    <span class="icon"></span>
+                                    <span class="mo_only">로그인</span>
+                                </a>
+                            </li>
+                            <li class="join">
+                                <a href="https://www.handballkorea.com/member/agree.php" class="go_unity">
+                                    <span class="icon"></span>
+                                    <span class="mo_only">회원가입</span>
+                                </a>
+                            </li>
+						                    </ul>
+                </div>
+
+                <!-- web -->
+                <div class="gnb pc_only">
+                    <ul class="depth01">
+						                            <li>
+                                <a href="/khf/greetings.php">KHF</a>
+																	<ul class="depth02">
+										<li><a href="/khf/greetings.php">인사말</a></li><li><a href="/khf/introduce.php">핸드볼이란?</a></li><li><a href="/khf/history.php">연혁</a></li><li><a href="/khf/organizationchart.php">조직도</a></li><li><a href="/khf/executive.php">임원소개</a></li><li><a href="/khf/regulations.php">정관/규정</a></li><li><a href="/khf/tournament.php">연간일정</a></li><li><a href="/khf/emblem.php">앰블럼&amp;마스코트</a></li><li><a href="/khf/address.php">찾아오시는길</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/members/integrated_search.php">선수/지도자</a>
+																	<ul class="depth02">
+										<li><a href="/members/integrated_search.php">선수통합검색안내</a></li><li><a href="https://g1.sports.or.kr/index.do" target="_blank">경기인등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/national/schedule_list.php">국가대표</a>
+																	<ul class="depth02">
+										<li><a href="/national/schedule_list.php">국제대회 일정/결과</a></li><li><a href="/national/member_list.php">국가대표명단</a></li><li><a href="/national/contry_score.php">나라별 전적 조회</a></li><li><a href="/national/history.php">국가대표역대결과</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/competition/schedule_list.php">국내대회</a>
+																	<ul class="depth02">
+										<li><a href="/competition/schedule_list.php">국내대회 일정/결과</a></li><li><a href="/competition/schedule_list_etc.php">기타 국내대회 일정/결과</a></li><li><a href="/competition/information.php">역대대회결과</a></li><li><a href="https://result.sports.or.kr/HB/INF001.do" target="_blank">대회 참가신청</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/medianews/notice_list.php">뉴스&미디어</a>
+																	<ul class="depth02">
+										<li><a href="/medianews/notice_list.php">공지사항</a></li><li><a href="/medianews/news_list.php">뉴스</a></li><li><a href="/medianews/report_list.php">보도자료</a></li><li><a href="/medianews/media_list.php">KHF영상</a></li><li><a href="/medianews/photo_list.php">KHF포토</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/data/list.php">자료실</a>
+																	<ul class="depth02">
+										<li><a href="/data/list.php">자료실</a></li><li><a href="/data/magazine.php">핸드볼코리아매거진</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/club/khf_club.php">핸드볼클럽</a>
+																	<ul class="depth02">
+										<li><a href="/club/khf_club.php">핸드볼클럽</a></li><li><a href="/club/lesson_schedule.php">수업일정</a></li><li><a href="/club/lesson_plan.php">수업계획</a></li><li><a href="/club/lesson_objective.php">수업목표</a></li><li><a href="/club/park_tour.php">올림픽공원투어</a></li><li><a href="/club/apply_list.php">강습신청</a></li><li><a href="/club/application_list.php">나의 수강 내역</a></li><li><a href="/club/children_apply.php">학부모/자녀등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/fan/comment.php">FAN</a>
+																	<ul class="depth02">
+										<li><a href="/fan/comment.php">한줄응원메시지</a></li><li><a href="/fan/event.php">EVENT</a></li><li><a href="/fan/supporters_info.php">서포터즈 가입</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="/hka/academy.php">핸드볼아카데미</a>
+																	<ul class="depth02">
+										<li><a href="/hka/academy.php">핸드볼아카데미</a></li><li><a href="/hka/leader.php">지도자 분과</a></li><li><a href="/hka/topplayer.php">우수선수 분과</a></li><li><a href="/hka/referee.php">심판 분과</a></li><li><a href="/hka/analysis.php">분석 분과</a></li>									</ul>
+									                            </li>
+							                    </ul>
+                </div>
+
+                <!-- mobile -->
+                <div class="gnb mo_only">
+                    <ul class="depth01">
+						                            <li>
+                                <a href="javascript:void(0);">KHF</a>
+																	<ul class="depth02">
+										<li><a href="/khf/greetings.php">인사말</a></li><li><a href="/khf/introduce.php">핸드볼이란?</a></li><li><a href="/khf/history.php">연혁</a></li><li><a href="/khf/organizationchart.php">조직도</a></li><li><a href="/khf/executive.php">임원소개</a></li><li><a href="/khf/regulations.php">정관/규정</a></li><li><a href="/khf/tournament.php">연간일정</a></li><li><a href="/khf/emblem.php">앰블럼&amp;마스코트</a></li><li><a href="/khf/address.php">찾아오시는길</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">선수/지도자</a>
+																	<ul class="depth02">
+										<li><a href="/members/integrated_search.php">선수통합검색안내</a></li><li><a href="https://g1.sports.or.kr/index.do" target="_blank">경기인등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">국가대표</a>
+																	<ul class="depth02">
+										<li><a href="/national/schedule_list.php">국제대회 일정/결과</a></li><li><a href="/national/member_list.php">국가대표명단</a></li><li><a href="/national/contry_score.php">나라별 전적 조회</a></li><li><a href="/national/history.php">국가대표역대결과</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">국내대회</a>
+																	<ul class="depth02">
+										<li><a href="/competition/schedule_list.php">국내대회 일정/결과</a></li><li><a href="/competition/schedule_list_etc.php">기타 국내대회 일정/결과</a></li><li><a href="/competition/information.php">역대대회결과</a></li><li><a href="https://result.sports.or.kr/HB/INF001.do" target="_blank">대회 참가신청</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">뉴스&미디어</a>
+																	<ul class="depth02">
+										<li><a href="/medianews/notice_list.php">공지사항</a></li><li><a href="/medianews/news_list.php">뉴스</a></li><li><a href="/medianews/report_list.php">보도자료</a></li><li><a href="/medianews/media_list.php">KHF영상</a></li><li><a href="/medianews/photo_list.php">KHF포토</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">자료실</a>
+																	<ul class="depth02">
+										<li><a href="/data/list.php">자료실</a></li><li><a href="/data/magazine.php">핸드볼코리아매거진</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">핸드볼클럽</a>
+																	<ul class="depth02">
+										<li><a href="/club/khf_club.php">핸드볼클럽</a></li><li><a href="/club/lesson_schedule.php">수업일정</a></li><li><a href="/club/lesson_plan.php">수업계획</a></li><li><a href="/club/lesson_objective.php">수업목표</a></li><li><a href="/club/park_tour.php">올림픽공원투어</a></li><li><a href="/club/apply_list.php">강습신청</a></li><li><a href="/club/application_list.php">나의 수강 내역</a></li><li><a href="/club/children_apply.php">학부모/자녀등록</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">FAN</a>
+																	<ul class="depth02">
+										<li><a href="/fan/comment.php">한줄응원메시지</a></li><li><a href="/fan/event.php">EVENT</a></li><li><a href="/fan/supporters_info.php">서포터즈 가입</a></li>									</ul>
+									                            </li>
+							                            <li>
+                                <a href="javascript:void(0);">핸드볼아카데미</a>
+																	<ul class="depth02">
+										<li><a href="/hka/academy.php">핸드볼아카데미</a></li><li><a href="/hka/leader.php">지도자 분과</a></li><li><a href="/hka/topplayer.php">우수선수 분과</a></li><li><a href="/hka/referee.php">심판 분과</a></li><li><a href="/hka/analysis.php">분석 분과</a></li>									</ul>
+									                            </li>
+							                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="gnb_bg"></div>
+</header>        <!-- //header -->
+
+        <!-- //container -->
+        <div id="container">
+			
+<h1 class="sr_only">국내대회 일정/결과</h1>
+<!-- sub 공통 -->
+<!-- sub_top -->
+<div class="sub_top">
+    <h2 class="page_name">국내대회 일정/결과</h2>
+    <ul class="page_breadcrumb">
+        <li>H</li>
+        <li>국내대회</li>
+        <li>국내대회 일정/결과</li>    </ul>
+</div>
+<!-- breadcrumb -->
+<div class="breadcrumb">
+    <ul class="cont_inner clearfix">
+        <li class="home"><a href="javascript:void(0);"><span class="icon"></span></a></li>
+        <li class="page_select">
+            <a href="javascript:void(0);">국내대회</a>
+            <ul class="depth02">
+				                    <li class=""><a href="/khf/greetings.php">KHF</a></li>
+                                        <li class=""><a href="javascript:alert('선수/지도자/팀 검색 시스템 점검중입니다.');">선수/지도자</a></li>
+                                        <li class=""><a href="/national/schedule_list.php">국가대표</a></li>
+                                        <li class="active"><a href="/competition/schedule_list.php">국내대회</a></li>
+                                        <li class=""><a href="/medianews/notice_list.php">뉴스&미디어</a></li>
+                                        <li class=""><a href="/data/list.php">자료실</a></li>
+                                        <li class=""><a href="/club/khf_club.php">핸드볼클럽</a></li>
+                                        <li class=""><a href="/fan/comment.php">FAN</a></li>
+                                        <li class=""><a href="/hka/academy.php">핸드볼아카데미</a></li>
+                                </ul>
+        </li>
+		            <li class="page_select">
+                <a href="javascript:void(0);">국내대회 일정/결과</a>
+                <ul class="depth02">
+					                        <li class="active"><a href="/competition/schedule_list.php">국내대회 일정/결과</a></li>
+                                                <li class=""><a href="/competition/schedule_list_etc.php">기타 국내대회 일정/결과</a></li>
+                                                <li class=""><a href="/competition/information.php">역대대회결과</a></li>
+                                                <li class=""><a href="https://result.sports.or.kr/HB/INF001.do">대회 참가신청</a></li>
+                                        </ul>
+            </li>
+			    </ul>
+</div>
+<!-- //sub 공통 -->            <div id="contents" class="">    <section class="sub_inner">
+        <div class="compare_top">
+    <div class="txt_center">
+        <p class="txt_light">
+            2024.08.15 (목) 12:00        </p>
+        <p>대학핸드볼통합선수권대회</p>
+        <p>1조</p>
+    </div>
+    <div class="vs_style main">
+        <div class="team home lose">
+            <span class="name">위덕대학교</span>
+            <span class="number">27</span>
+        </div>
+        <div class="center">
+            <div class="inner">
+                <div class="vs_style sub">
+                    <div class="team home">
+                        <span class="name">14</span>
+                    </div>
+                    <div class="center">
+                        전반전
+                    </div>
+                    <div class="team away">
+                        <span class="name">12</span>
+                    </div>
+                </div>
+                <div class="vs_style sub">
+                    <div class="team home">
+                        <span class="name">13</span>
+                    </div>
+                    <div class="center">
+                        후반전
+                    </div>
+                    <div class="team away">
+                        <span class="name">16</span>
+                    </div>
+                </div>
+
+                <!--2022-10-11 연장1/연장2/패널티 추가-->
+                                <!--//2022-10-11 연장1/연장2/패널티 추가-->
+            </div>
+        </div>
+        <div class="team away win">
+            <span class="number">28</span>
+            <span class="name">강원대학교</span>
+        </div>
+    </div>
+</div>
+
+<!-- 탭메뉴 -->
+<div class="sub_tab_menu">
+    <ul>
+        <li class="active"><a href="detail_new.php?SEASON_ID=2024&COMP_ID=15&EVENT_CD=117&KIND_CD=04&DETAIL_CLASS_CD=100401&NSL_ROUND=1&GROUP_CD=1&GAME_CD=1">양팀비교</a></li>
+        <li><a href="detail_player_record_new.php?SEASON_ID=2024&COMP_ID=15&EVENT_CD=117&KIND_CD=04&DETAIL_CLASS_CD=100401&NSL_ROUND=1&GROUP_CD=1&GAME_CD=1">선수기록</a></li>
+    </ul>
+</div>        <!-- 용어설명 버튼 -->
+        <div class="record_table compare">
+            <a href="javascript:void(0);" class="btn_popup" data-popup="popup_record">
+                <span class="icon"></span>용어설명
+            </a>
+            <!-- popup -->
+            <div class="popup_wrap popup_record" data-popup="popup_record">
+                <div class="inner">
+                    <div class="contents_wrap">
+                        <div class="top_wrap">
+                            <p class="title"><span class="icon"></span>용어설명</p>
+                            <button type="button" class="btn_close_popup">
+                                <span class="icon"></span>
+                            </button>
+                        </div>
+                        <div class="cont">
+                            <ul>
+                                <li>6PM : 6PM득점</li>
+                                <li>Total shoots : 슛성공률</li>
+                                <li>2MIN : 2분퇴장</li>
+                                <li>AS : 어시스트</li>
+                                <li>Wing : 윙 득점</li>
+                                <li>6PM shoots : 6m성공률</li>
+                                <li>RC : 레드카드</li>
+                                <li>TF : 실책</li>
+                                <li>9PM : 9PM득점</li>
+                                <li>Wing shoots : 윙슛성공률</li>
+                                <li>DR : 블루카드</li>
+                                <li>ST : 스틸</li>
+                                <li>7PM : 7PM득점</li>
+                                <li>9PM shoots : 9m성공률</li>
+                                <li>RUN : 러닝타임</li>
+                                <li>BS : 블록슛</li>
+                                <li>FB : 속공</li>
+                                <li>7PM shoots : 7m성공률</li>
+                                <li>RB : 리바운드</li>
+                                <li>YC : 옐로우카드</li>
+                                <li>BT : 돌파득점</li>
+                                <li>Fast shoots : 속공성공률</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 양팀비교 차트 -->
+        <div class="compare_chart">
+            <div class="game_score">
+                <div class="team home">
+                    <span class="name">위덕대학교</span>
+                </div>
+                <div class="score">VS</div>
+                <div class="team away">
+                    <span class="name">강원대학교</span>
+                </div>
+            </div>
+            <ul class="compare_bar">
+                                    <li>
+                        <div class="team home">
+                            <div class="bar" style="width:48.9%">
+                                <div class="inner">
+                                    <p class="number">48.9%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="center">TOTAL</div>
+                        <div class="team away">
+                            <div class="bar" style="width:51.1%">
+                                <div class="inner">
+                                    <p class="number">51.1%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                                        <li>
+                        <div class="team home">
+                            <div class="bar" style="width:28.6%">
+                                <div class="inner">
+                                    <p class="number">28.6%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="center">6PM</div>
+                        <div class="team away">
+                            <div class="bar" style="width:71.4%">
+                                <div class="inner">
+                                    <p class="number">71.4%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                                        <li>
+                        <div class="team home">
+                            <div class="bar" style="width:55.6%">
+                                <div class="inner">
+                                    <p class="number">55.6%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="center">WING</div>
+                        <div class="team away">
+                            <div class="bar" style="width:44.4%">
+                                <div class="inner">
+                                    <p class="number">44.4%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                                        <li>
+                        <div class="team home">
+                            <div class="bar" style="width:66.7%">
+                                <div class="inner">
+                                    <p class="number">66.7%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="center">9PM</div>
+                        <div class="team away">
+                            <div class="bar" style="width:33.3%">
+                                <div class="inner">
+                                    <p class="number">33.3%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                                        <li>
+                        <div class="team home">
+                            <div class="bar" style="width:0%">
+                                <div class="inner">
+                                    <p class="number">0%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="center">7PM</div>
+                        <div class="team away">
+                            <div class="bar" style="width:100%">
+                                <div class="inner">
+                                    <p class="number">100%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                                        <li>
+                        <div class="team home">
+                            <div class="bar" style="width:0%">
+                                <div class="inner">
+                                    <p class="number">0%</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="center">FAST</div>
+                        <div class="team away">
+                            <div class="bar" style="width:0%">
+                                <div class="inner">
+                                    <p class="number">0%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                                </ul>
+        </div>
+
+        <!-- 양팀비교 테이블 -->
+        <div class="compare_table table_wrap">
+            <table>
+                <caption class="sr_only">양팀비교</caption>
+                <colgroup>
+                    <col>
+                    <col class="center">
+                    <col>
+                </colgroup>
+                <thead class="icons_title">
+                <tr>
+                    <th>
+                        <ul class="game_icons home">
+                                                            <li>
+                                    <span class="icon yc"></span>
+                                    <span class="number">2</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon min2"></span>
+                                    <span class="number">5</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon rc"></span>
+                                    <span class="number">0</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon bc"></span>
+                                    <span class="number">0</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon game7"></span>
+                                    <span class="number">44</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon game"></span>
+                                    <span class="number">0</span>
+                                </li>
+                                                        </ul>
+                    </th>
+                    <th></th>
+                    <th>
+                        <ul class="game_icons away">
+                                                            <li>
+                                    <span class="icon yc"></span>
+                                    <span class="number">0</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon min2"></span>
+                                    <span class="number">0</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon rc"></span>
+                                    <span class="number">0</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon bc"></span>
+                                    <span class="number">0</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon game7"></span>
+                                    <span class="number">46</span>
+                                </li>
+                                                                <li>
+                                    <span class="icon game"></span>
+                                    <span class="number">5</span>
+                                </li>
+                                                        </ul>
+                    </th>
+                </tr>
+                </thead>
+                <tbody>
+                                        <tr>
+                            <td>7</td>
+                            <td class="center">AS</td>
+                            <td>10</td>
+                        </tr>
+                                                <tr>
+                            <td>7</td>
+                            <td class="center">TF</td>
+                            <td>6</td>
+                        </tr>
+                                                <tr>
+                            <td>4</td>
+                            <td class="center">ST</td>
+                            <td>1</td>
+                        </tr>
+                                                <tr>
+                            <td>2</td>
+                            <td class="center">BS</td>
+                            <td>5</td>
+                        </tr>
+                                                <tr>
+                            <td>2</td>
+                            <td class="center">YC</td>
+                            <td>0</td>
+                        </tr>
+                                                <tr>
+                            <td>5</td>
+                            <td class="center">2Min</td>
+                            <td>0</td>
+                        </tr>
+                                                <tr>
+                            <td>0</td>
+                            <td class="center">RC</td>
+                            <td>0</td>
+                        </tr>
+                                                <tr>
+                            <td>0</td>
+                            <td class="center">DR</td>
+                            <td>0</td>
+                        </tr>
+                                        <!--<tr>
+                    <td><?/*=(int)$row_arr['TEAM']['H']['SEC_VA']>0?gmdate('H:i:s', (int)$row_arr['TEAM']['H']['SEC_VA']):0*/?></td>
+                    <td class="center">Run</td>
+                    <td><?/*=(int)$row_arr['TEAM']['A']['SEC_VA']>0?gmdate('H:i:s', (int)$row_arr['TEAM']['A']['SEC_VA']):0*/?></td>
+                </tr>-->
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <script>
+        $(function () {
+            //popup
+            $('.btn_popup').on('click', function (e) {
+                e.preventDefault();
+                var popupSrc = $(this).attr('data-popup');
+                $('.popup_wrap[data-popup=' + popupSrc + ']').addClass('active');
+            });
+            $('.popup_wrap .btn_close_popup').on('click', function () {
+                $(this).parents('.popup_wrap').removeClass('active');
+            });
+        });
+    </script>
+        </div>
+    </div>
+    <!-- //container -->
+
+            
+                    <footer>
+                <div class="inner">
+                    <ul class="list_iblock line">
+                        <li><a href="/khf/regulations.php">정관/규정</a></li>
+                        <li><a href="/privacy.php" class="font_white">개인정보처리방침</a></li>
+                    </ul>
+                    <p>
+                        서울특별시 송파구 올림픽로 424 SK핸드볼경기장 3층 <span class="mo_br"></span>사업자번호 215-82-02004 T
+                        02-6200-1414 F
+                        02-420-5337 <span class="mo_br"></span>E-Mail&nbsp;handball_pr@sports.or.kr<br>
+                        COPYRIGHT ⓒ 대한핸드볼협회 ALL RIGHTS RESERVED
+                    </p>
+                    <div class="form_wrap select">
+                        <select onchange="if(this.value !== 'none') window.open(this.value,'_blank');">
+                            <option value="none">관련사이트</option>
+                            <option value="https://www.mcst.go.kr/kor/main.jsp">문화체육관광부</option>
+                            <option value="https://www.sports.or.kr/index.do">대한체육회</option>
+                            <option value="https://www.ihf.info/">국제핸드볼연맹</option>
+                            <option value="http://www.asianhandball.com/">아시아핸드볼연맹</option>
+                        </select>
+                    </div>
+                </div>
+            </footer>
+            
+        <a href="javascript:void(0);" class="btn_top"><span class="icon"></span>TOP</a>
+    </div>
+
+    <!-- 공통 script -->
+    <script type="text/javascript" src="/static/js/common.js"></script>
+    <!-- //공통 script -->
+
+	<script type="text/javascript">
+	$(function () {
+		$('a.go_unity').on('click',function(){
+            var this_alert_msg = $(this).attr('alert_mas');
+            if($.trim(this_alert_msg)){
+                alert(this_alert_msg);
+            }
+
+			location.href='/go_unity.php?url='+$(this).attr('href');
+			return false;
+		});
+	});
+	</script>
+</body>
+
+</html>
