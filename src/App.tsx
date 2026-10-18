@@ -642,7 +642,7 @@ export default function App() {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
-              <img src="https://khf.handballkorea.com/images/common/logo.png" alt="Logo" className="w-7 h-7 invert" />
+              <img src="/src/assets/images/handball_icon_1792316517852.jpg" alt="Logo" className="w-7 h-7" />
             </div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">경기 일정/결과</h1>
           </div>
