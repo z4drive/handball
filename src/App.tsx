@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Menu, ChevronDown, Home, ChevronRight, ArrowUp } from 'lucide-react';
+import { Menu, ChevronDown, Home, ChevronRight, ArrowUp, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 
@@ -85,6 +85,11 @@ export default function App() {
   const [selectedPlayerTeam, setSelectedPlayerTeam] = useState<string | undefined>(undefined);
   const [playerHistory, setPlayerHistory] = useState<any[]>([]);
   const [playerLoading, setPlayerLoading] = useState(false);
+  
+  // 대한체육회 스포츠지원포털 선수정보 상태
+  const [playerPortalInfo, setPlayerPortalInfo] = useState<any | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [showPortalTab, setShowPortalTab] = useState(false);
 
   const schools = [
     "창원중앙고등학교", 
@@ -318,6 +323,124 @@ export default function App() {
     if (selectedPlayer && playerHistory.length > 0) {
       const savedKey = `player_saved_v18_${selectedPlayer}_${selectedPlayerTeam || 'all'}`;
       localStorage.setItem(savedKey, JSON.stringify(playerHistory));
+    }
+  };
+
+  // 학교명 정규화 및 일치 여부 확인 함수 (동일이름 선수 구분)
+  const normalizeSchool = (str?: string): string => {
+    if (!str) return "";
+    return str
+      .replace(/\s+/g, "")
+      .replace(/여자고등학교/g, "여고")
+      .replace(/고등학교/g, "고")
+      .replace(/여자중학교/g, "여중")
+      .replace(/중학교/g, "중")
+      .replace(/초등학교/g, "초")
+      .replace(/대학교/g, "대")
+      .replace(/학교/g, "");
+  };
+
+  const isSchoolMatch = (schoolA?: string, schoolB?: string): boolean => {
+    if (!schoolA || !schoolB) return false;
+    const a = normalizeSchool(schoolA);
+    const b = normalizeSchool(schoolB);
+    if (!a || !b) return false;
+    if (a.includes(b) || b.includes(a)) return true;
+    const rootA = a.replace(/(고|여고|중|여중|초|대)$/, "");
+    const rootB = b.replace(/(고|여고|중|여중|초|대)$/, "");
+    if (rootA && rootB && (rootA.includes(rootB) || rootB.includes(rootA))) return true;
+    return false;
+  };
+
+  // 대한체육회 스포츠지원포털 선수통합검색 (종목: 핸드볼, 시도전체, 성별전체, 선수명, 학교정보)
+  const fetchPlayerPortalInfo = async (playerName: string, teamName?: string, isRefetch = false) => {
+    setShowPortalTab(true);
+    const cacheKey = `portal_player_v2_${playerName}_${teamName || 'all'}`;
+
+    if (!isRefetch) {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          setPlayerPortalInfo(JSON.parse(cached));
+          return;
+        } catch (e) {
+          // ignore cache parse error
+        }
+      }
+    }
+
+    setPortalLoading(true);
+    setPlayerPortalInfo(null);
+
+    try {
+      const url = `/api/player-info?name=${encodeURIComponent(playerName)}${teamName ? `&team=${encodeURIComponent(teamName)}` : ''}`;
+      const res = await axios.get(url);
+      if (res.data && res.data.players) {
+        setPlayerPortalInfo(res.data);
+        localStorage.setItem(cacheKey, JSON.stringify(res.data));
+      } else {
+        throw new Error("No player data returned");
+      }
+    } catch (error) {
+      console.warn("Backend /api/player-info failed, trying client fallback:", error);
+      try {
+        const targetUrl = "https://g1.sports.or.kr/stat/playerSearch.do";
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        const res = await axios.post(proxyUrl, new URLSearchParams({
+          gubun: "P",
+          searchClassCd: "HB",
+          searchSidoCd: "",
+          searchSexCd: "",
+          searchName: playerName
+        }).toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          timeout: 10000
+        });
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(res.data, 'text/html');
+        const rows = doc.querySelectorAll('table tbody tr');
+        let players: any[] = [];
+
+        rows.forEach(tr => {
+          const tds = tr.querySelectorAll('td');
+          if (tds.length >= 7) {
+            const no = tds[0]?.textContent?.trim() || "";
+            const pName = tds[1]?.textContent?.trim() || "";
+            const regYear = tds[2]?.textContent?.trim() || "";
+            const gender = tds[3]?.textContent?.trim() || "";
+            const sido = tds[4]?.textContent?.trim() || "";
+            const sport = tds[5]?.textContent?.trim() || "";
+            const category = tds[6]?.textContent?.trim() || "";
+            const team = tds.length >= 8 ? (tds[7]?.textContent?.trim() || "") : "";
+            if (pName && pName.includes(playerName)) {
+              players.push({ no, name: pName, regYear, gender, sido, sport, category, team });
+            }
+          }
+        });
+
+        // 동일이름이 있고 학교정보(teamName)가 있을 경우 학교 일치 선수만 필터링
+        if (teamName && players.length > 0) {
+          const matched = players.filter(p => isSchoolMatch(p.team, teamName));
+          if (matched.length > 0) {
+            players = matched;
+          }
+        }
+
+        const fallbackData = {
+          success: true,
+          source: "https://g1.sports.or.kr/stat/playerSearch.do?gubun=P",
+          name: playerName,
+          team: teamName,
+          players
+        };
+        setPlayerPortalInfo(fallbackData);
+        localStorage.setItem(cacheKey, JSON.stringify(fallbackData));
+      } catch (fbErr) {
+        console.error("Portal fallback fetch failed:", fbErr);
+      }
+    } finally {
+      setPortalLoading(false);
     }
   };
 
@@ -643,11 +766,18 @@ export default function App() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-10"></div>
                     <div className="text-center">
-                      <h2 className="text-2xl font-black text-slate-800">{selectedPlayer} 선수 기록</h2>
-                      <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">Season Match History</p>
+                      <h2 className="text-2xl font-black text-slate-800">
+                        {selectedPlayer} {showPortalTab ? '선수 정보' : '선수 기록'}
+                      </h2>
+                      <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">
+                        {showPortalTab ? '대한체육회 스포츠지원포털 통합검색' : 'Season Match History'}
+                      </p>
                     </div>
                     <button 
-                      onClick={() => setSelectedPlayer(null)}
+                      onClick={() => {
+                        setSelectedPlayer(null);
+                        setShowPortalTab(false);
+                      }}
                       className="p-3 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 transition-colors shadow-inner"
                     >
                       <ChevronDown className="w-6 h-6" />
@@ -661,88 +791,242 @@ export default function App() {
                       저장
                     </button>
                     <button 
-                      onClick={() => fetchPlayerHistory(selectedPlayer!, selectedPlayerTeam, true)}
+                      onClick={() => {
+                        fetchPlayerHistory(selectedPlayer!, selectedPlayerTeam, true);
+                        if (showPortalTab) {
+                          fetchPlayerPortalInfo(selectedPlayer!, selectedPlayerTeam, true);
+                        }
+                      }}
                       className="px-4 py-1.5 bg-slate-50 text-slate-600 text-[10px] font-black rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
                     >
                       재조회
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (showPortalTab) {
+                          setShowPortalTab(false);
+                        } else {
+                          fetchPlayerPortalInfo(selectedPlayer!, selectedPlayerTeam);
+                        }
+                      }}
+                      className={`px-4 py-1.5 ${showPortalTab ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200'} text-[10px] font-black rounded-full border hover:bg-indigo-50 hover:text-indigo-600 transition-colors`}
+                    >
+                      선수정보
                     </button>
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* 선수정보 클릭 시 선수이름 밑에 스크롤 되면서 보이는 선수상세정보 */}
+                  {showPortalTab && (
+                    <div className="bg-indigo-50/40 rounded-3xl p-5 border border-indigo-100/80 shadow-xs space-y-3 animate-in fade-in duration-300">
+                      <div className="flex items-center justify-between pb-2 border-b border-indigo-100/60">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-black text-indigo-950">대한체육회 선수 상세정보</span>
+                          {selectedPlayerTeam && (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
+                              {selectedPlayerTeam} 일치
+                            </span>
+                          )}
+                        </div>
+                        <a 
+                          href="https://g1.sports.or.kr/stat/playerSearch.do?gubun=P"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 bg-white text-indigo-600 text-[10px] font-black rounded-xl border border-indigo-200 shadow-sm hover:bg-indigo-50 flex items-center space-x-1"
+                        >
+                          <span>스포츠지원포털</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+
+                      {/* 선수상세정보 내부 스크롤 영역 */}
+                      <div className="max-h-64 sm:max-h-72 overflow-y-auto space-y-3 pr-1">
+                        {portalLoading ? (
+                          <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                            <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-xs font-bold text-slate-400">대한체육회 포털 선수 정보 조회 중...</p>
+                          </div>
+                        ) : (() => {
+                          // 동일이름이 있으면 학교정보(selectedPlayerTeam)와 일치하는 선수만 필터링
+                          const matchedPortalPlayers = (playerPortalInfo?.players || []).filter((p: any) => 
+                            !selectedPlayerTeam || isSchoolMatch(p.team, selectedPlayerTeam)
+                          );
+                          const displayPlayers = matchedPortalPlayers.length > 0 ? matchedPortalPlayers : (playerPortalInfo?.players || []);
+
+                          return displayPlayers.length > 0 ? (
+                            <div className="space-y-4">
+                              {/* 검색된 선수 카드 */}
+                              {displayPlayers.map((p: any, idx: number) => (
+                                <div key={idx} className="bg-white p-4 rounded-2xl border border-indigo-100/70 space-y-3 shadow-xs">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-sm font-black text-slate-800">{p.name}</span>
+                                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${p.gender === '남자' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+                                        {p.gender}
+                                      </span>
+                                      <span className="text-[9px] font-black px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100">
+                                        {p.sport || '핸드볼'}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-400">
+                                      최초등록 {p.regYear}년
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-100">
+                                    <div className="bg-slate-50 p-2.5 rounded-xl text-center">
+                                      <div className="text-[9px] text-gray-400 font-bold uppercase">소속팀(학교)</div>
+                                      <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{p.team || '-'}</div>
+                                    </div>
+                                    <div className="bg-slate-50 p-2.5 rounded-xl text-center">
+                                      <div className="text-[9px] text-gray-400 font-bold uppercase">종별</div>
+                                      <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{p.category || '-'}</div>
+                                    </div>
+                                    <div className="bg-slate-50 p-2.5 rounded-xl text-center">
+                                      <div className="text-[9px] text-gray-400 font-bold uppercase">시도</div>
+                                      <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{p.sido || '-'}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* 경기인 등록 이력 (상세) */}
+                              {playerPortalInfo?.detailedHistories && playerPortalInfo.detailedHistories.length > 0 && (
+                                <div className="space-y-2 pt-1">
+                                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">
+                                    경기인 등록 이력
+                                  </div>
+                                  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
+                                    <table className="w-full text-left border-collapse text-xs">
+                                      <thead>
+                                        <tr className="bg-slate-50 border-b border-gray-100">
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">등록년도</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">소속팀(학교)</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">종별</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">시도</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">구분</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-50">
+                                        {playerPortalInfo.detailedHistories.map((hist: any, hIdx: number) => (
+                                          <tr key={hIdx} className="hover:bg-slate-50/50">
+                                            <td className="px-3 py-2 font-black text-slate-700 text-center">{hist.year}</td>
+                                            <td className="px-3 py-2 font-bold text-slate-800 text-center">{hist.team}</td>
+                                            <td className="px-3 py-2 text-slate-500 text-center">{hist.category}</td>
+                                            <td className="px-3 py-2 text-slate-400 text-center">{hist.sido}</td>
+                                            <td className="px-3 py-2 text-slate-400 text-center text-[10px]">{hist.regType}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="py-6 text-center text-xs text-slate-500 font-bold">
+                              대한체육회 포털에 등록된 '{selectedPlayer}' 선수 정보가 없습니다.
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 선수 경기 기록 (동일이름 구분: 학교정보와 일치하는 경기만 표시) */}
                   {playerLoading ? (
                     <div className="flex flex-col items-center justify-center py-24 space-y-4">
                       <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                       <p className="text-sm font-black text-slate-300 uppercase tracking-widest">Fetching season data...</p>
                     </div>
-                  ) : playerHistory.length > 0 ? (
-                    <div className="space-y-4">
-                      {playerHistory.map((h, i) => (
-                        <div key={i} className="bg-slate-50 p-6 rounded-[32px] border border-gray-100 space-y-4 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black text-indigo-600 px-3 py-1 bg-white rounded-full shadow-sm border border-indigo-50 uppercase">{h.tournament}</span>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{h.date}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div 
-                              onClick={() => {
-                                if (h.detailUrl) {
-                                  setActiveDetailTab('compare');
-                                  fetchDetail(h.detailUrl);
-                                  setSelectedPlayer(null);
-                                }
-                              }}
-                              className="flex-1 text-sm font-black text-slate-800 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
-                            >
-                              {h.teamA}
-                            </div>
-                            <div className="mx-6 flex items-center space-x-3">
-                              <span className={`text-xl font-black ${parseInt(h.score.split(':')[0]) > parseInt(h.score.split(':')[1]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score.split(':')[0]}</span>
-                              <span className="text-sm font-black text-gray-200">:</span>
-                              <span className={`text-xl font-black ${parseInt(h.score.split(':')[1]) > parseInt(h.score.split(':')[0]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score.split(':')[1]}</span>
-                            </div>
-                            <div 
-                              onClick={() => {
-                                if (h.detailUrl) {
-                                  setActiveDetailTab('compare');
-                                  fetchDetail(h.detailUrl);
-                                  setSelectedPlayer(null);
-                                }
-                              }}
-                              className="flex-1 text-sm font-black text-slate-800 text-right leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
-                            >
-                              {h.teamB}
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-4 gap-4 pt-4 border-t border-gray-100/50">
-                            <div className="text-center">
-                              <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">G/S</div>
-                              <div className="text-sm font-black text-slate-800">{h.gs}</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">%</div>
-                              <div className="text-sm font-black text-slate-800">{h.rate}%</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">AS</div>
-                              <div className="text-sm font-black text-indigo-600">{h.as}</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">ST</div>
-                              <div className="text-sm font-black text-indigo-600">{h.st}</div>
-                            </div>
-                          </div>
+                  ) : (() => {
+                    const filteredMatches = selectedPlayerTeam 
+                      ? playerHistory.filter(h => isSchoolMatch(h.teamA, selectedPlayerTeam) || isSchoolMatch(h.teamB, selectedPlayerTeam))
+                      : playerHistory;
+                    const matchesToShow = filteredMatches.length > 0 ? filteredMatches : playerHistory;
+
+                    return matchesToShow.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                            시즌 경기 기록 ({matchesToShow.length}경기)
+                          </span>
+                          {selectedPlayerTeam && (
+                            <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-full">
+                              {selectedPlayerTeam}
+                            </span>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="py-24 text-center">
-                      <div className="w-16 h-16 bg-slate-50 rounded-full mx-auto flex items-center justify-center text-slate-200 mb-4">
-                        <ChevronDown className="w-8 h-8 opacity-20" />
+                        {matchesToShow.map((h, i) => (
+                          <div key={i} className="bg-slate-50 p-6 rounded-[32px] border border-gray-100 space-y-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-indigo-600 px-3 py-1 bg-white rounded-full shadow-sm border border-indigo-50 uppercase">{h.tournament}</span>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{h.date}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div 
+                                onClick={() => {
+                                  if (h.detailUrl) {
+                                    setActiveDetailTab('compare');
+                                    fetchDetail(h.detailUrl);
+                                    setSelectedPlayer(null);
+                                  }
+                                }}
+                                className="flex-1 text-sm font-black text-slate-800 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+                              >
+                                {h.teamA}
+                              </div>
+                              <div className="mx-6 flex items-center space-x-3">
+                                <span className={`text-xl font-black ${parseInt(h.score.split(':')[0]) > parseInt(h.score.split(':')[1]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score.split(':')[0]}</span>
+                                <span className="text-sm font-black text-gray-200">:</span>
+                                <span className={`text-xl font-black ${parseInt(h.score.split(':')[1]) > parseInt(h.score.split(':')[0]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score.split(':')[1]}</span>
+                              </div>
+                              <div 
+                                onClick={() => {
+                                  if (h.detailUrl) {
+                                    setActiveDetailTab('compare');
+                                    fetchDetail(h.detailUrl);
+                                    setSelectedPlayer(null);
+                                  }
+                                }}
+                                className="flex-1 text-sm font-black text-slate-800 text-right leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+                              >
+                                {h.teamB}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-4 gap-4 pt-4 border-t border-gray-100/50">
+                              <div className="text-center">
+                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">G/S</div>
+                                <div className="text-sm font-black text-slate-800">{h.gs}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">%</div>
+                                <div className="text-sm font-black text-slate-800">{h.rate}%</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">AS</div>
+                                <div className="text-sm font-black text-indigo-600">{h.as}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">ST</div>
+                                <div className="text-sm font-black text-indigo-600">{h.st}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-sm font-black text-slate-300 uppercase tracking-widest">No matching records found.</p>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="py-24 text-center">
+                        <div className="w-16 h-16 bg-slate-50 rounded-full mx-auto flex items-center justify-center text-slate-200 mb-4">
+                          <ChevronDown className="w-8 h-8 opacity-20" />
+                        </div>
+                        <p className="text-sm font-black text-slate-300 uppercase tracking-widest">
+                          {selectedPlayerTeam ? `${selectedPlayerTeam} 경기 기록이 없습니다.` : 'No matching records found.'}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </motion.div>
             </motion.div>

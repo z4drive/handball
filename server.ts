@@ -370,6 +370,32 @@ async function startServer() {
     }
   });
 
+  // 학교명 정규화 및 일치 여부 확인 함수 (동일이름 선수 구분)
+  function normalizeSchool(str: string): string {
+    if (!str) return "";
+    return str
+      .replace(/\s+/g, "")
+      .replace(/여자고등학교/g, "여고")
+      .replace(/고등학교/g, "고")
+      .replace(/여자중학교/g, "여중")
+      .replace(/중학교/g, "중")
+      .replace(/초등학교/g, "초")
+      .replace(/대학교/g, "대")
+      .replace(/학교/g, "");
+  }
+
+  function isSchoolMatch(schoolA: string, schoolB: string): boolean {
+    if (!schoolA || !schoolB) return false;
+    const a = normalizeSchool(schoolA);
+    const b = normalizeSchool(schoolB);
+    if (!a || !b) return false;
+    if (a.includes(b) || b.includes(a)) return true;
+    const rootA = a.replace(/(고|여고|중|여중|초|대)$/, "");
+    const rootB = b.replace(/(고|여고|중|여중|초|대)$/, "");
+    if (rootA && rootB && (rootA.includes(rootB) || rootB.includes(rootA))) return true;
+    return false;
+  }
+
   // 선수 개인 경기 기록 스크래퍼
   app.get("/api/player-history", async (req, res) => {
     try {
@@ -417,10 +443,9 @@ async function startServer() {
             const score = scoreCell.find(".score").text().trim();
             const detailUrlRaw = scoreCell.find(".score").attr("href");
 
-            // 관계없는 데이터 필터링: 팀명 포함 여부 확인 (더 유연하게)
+            // 관계없는 데이터 필터링: 팀명/학교정보 일치 확인 (동일이름 구분)
             if (targetTeam) {
-              const isMatch = teamA.includes(targetTeam) || targetTeam.includes(teamA) || 
-                              teamB.includes(targetTeam) || targetTeam.includes(teamB);
+              const isMatch = isSchoolMatch(teamA, targetTeam) || isSchoolMatch(teamB, targetTeam);
               if (!isMatch) return;
             }
             
@@ -522,6 +547,147 @@ async function startServer() {
     } catch (error: any) {
       console.error("Player history error:", error.message);
       res.status(500).json({ error: "선수 기록을 불러오지 못했습니다." });
+    }
+  });
+
+  // 대한체육회 스포츠지원포털 선수통합검색 (종목: 핸드볼, 시도전체, 성별전체, 선수명)
+  app.get("/api/player-info", async (req, res) => {
+    try {
+      const name = (req.query.name as string || "").trim();
+      const team = (req.query.team as string || "").trim();
+      if (!name) {
+        return res.status(400).json({ error: "선수명을 입력해주세요." });
+      }
+
+      console.log(`[PlayerInfo] Searching player in sports.or.kr: ${name} (team: ${team})`);
+      const searchUrl = "https://g1.sports.or.kr/stat/playerSearch.do";
+      const postData = new URLSearchParams({
+        gubun: "P",
+        searchClassCd: "HB", // 핸드볼 종목코드
+        searchSidoCd: "",    // 시도 전체
+        searchSexCd: "",     // 성별 전체
+        searchName: name
+      }).toString();
+
+      const response = await axios.post(searchUrl, postData, {
+        headers: {
+          ...scrapingHeaders,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Referer": "https://g1.sports.or.kr/stat/playerSearch.do?gubun=P",
+          "Origin": "https://g1.sports.or.kr"
+        },
+        timeout: 10000
+      });
+
+      const $ = cheerio.load(response.data);
+      let playerList: any[] = [];
+
+      $("table tbody tr").each((_, tr) => {
+        const tds = $(tr).find("td");
+        if (tds.length >= 7) {
+          const onclickAttr = $(tr).attr("onclick") || "";
+          let personNo = "";
+          let classCd = "HB";
+          const match = onclickAttr.match(/viewHistory\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/);
+          if (match) {
+            classCd = match[1];
+            personNo = match[2];
+          }
+
+          const no = $(tds[0]).text().trim();
+          const pName = $(tds[1]).text().trim();
+          const regYear = $(tds[2]).text().trim();
+          const gender = $(tds[3]).text().trim();
+          const sido = $(tds[4]).text().trim();
+          const sport = $(tds[5]).text().trim();
+          const category = $(tds[6]).text().trim();
+          const teamName = tds.length >= 8 ? $(tds[7]).text().trim() : "";
+
+          if (pName && pName.includes(name)) {
+            playerList.push({
+              no,
+              name: pName,
+              regYear,
+              gender,
+              sido,
+              sport,
+              category,
+              team: teamName,
+              personNo,
+              classCd
+            });
+          }
+        }
+      });
+
+      // 동일이름이 있는 경우 학교정보(team)와 일치하는 선수 우선 필터링
+      if (team && playerList.length > 0) {
+        const schoolMatched = playerList.filter(p => isSchoolMatch(p.team, team));
+        if (schoolMatched.length > 0) {
+          playerList = schoolMatched;
+        }
+      }
+
+      // 만약 등록된 선수가 있고 personNo가 있다면, 일치하는 선수의 세부 등록이력 조회
+      let detailedHistories: any[] = [];
+      if (playerList.length > 0 && playerList[0].personNo) {
+        try {
+          const detailRes = await axios.post("https://g1.sports.or.kr/stat/playerSearchResult.do", 
+            new URLSearchParams({
+              classCd: playerList[0].classCd || "HB",
+              personNo: playerList[0].personNo
+            }).toString(),
+            {
+              headers: {
+                ...scrapingHeaders,
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer": searchUrl,
+                "Origin": "https://g1.sports.or.kr"
+              },
+              timeout: 8000
+            }
+          );
+
+          const $d = cheerio.load(detailRes.data);
+          $d("table tbody tr").each((_, tr) => {
+            const tds = $d(tr).find("td");
+            if (tds.length >= 6) {
+              const year = $d(tds[0]).text().trim();
+              const sport = $d(tds[1]).text().trim();
+              const category = $d(tds[2]).text().trim();
+              const sido = $d(tds[3]).text().trim();
+              const team = $d(tds[4]).text().trim();
+              const regType = $d(tds[5]).text().trim();
+              if (/^\d{4}$/.test(year) && sport) {
+                detailedHistories.push({
+                  year,
+                  sport,
+                  category,
+                  sido,
+                  team,
+                  regType
+                });
+              }
+            }
+          });
+        } catch (detailErr) {
+          console.error("[PlayerInfo] Error fetching detail history:", detailErr);
+        }
+      }
+
+      res.json({
+        success: true,
+        source: "https://g1.sports.or.kr/stat/playerSearch.do?gubun=P",
+        name,
+        players: playerList,
+        detailedHistories
+      });
+    } catch (error: any) {
+      console.error("[PlayerInfo] Error:", error.message);
+      res.status(500).json({ 
+        error: "대한체육회 선수 정보를 조회하지 못했습니다.",
+        message: error.message 
+      });
     }
   });
 
