@@ -10,6 +10,14 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Common headers for scraping to mimic a browser
+  const scrapingHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': 'https://khf.handballkorea.com/'
+  };
+
   // API Route for crawling
   app.get("/api/schedule", async (req, res) => {
     try {
@@ -19,9 +27,7 @@ async function startServer() {
       const url = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${year}&DS_MONTH=${month}&GROUP_CD=`;
       
       const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
+        headers: scrapingHeaders,
         timeout: 20000
       });
 
@@ -124,9 +130,7 @@ async function startServer() {
 
       console.log(`Scraping match detail: ${url}`);
       const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
+        headers: scrapingHeaders,
         timeout: 15000
       });
 
@@ -216,9 +220,7 @@ async function startServer() {
       
       try {
         const playerRes = await axios.get(playerRecordUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          },
+          headers: scrapingHeaders,
           timeout: 10000
         });
         const $p = cheerio.load(playerRes.data);
@@ -349,9 +351,7 @@ async function startServer() {
         
         try {
           const response = await axios.get(url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
+            headers: scrapingHeaders,
             timeout: 15000
           });
 
@@ -431,9 +431,7 @@ async function startServer() {
         try {
           const playerRecordUrl = m.detailUrl.replace("detail_new.php", "detail_player_record_new.php");
           const res = await axios.get(playerRecordUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
+            headers: scrapingHeaders,
             timeout: 5000
           });
           const $p = cheerio.load(res.data);
