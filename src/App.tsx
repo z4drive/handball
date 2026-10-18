@@ -99,6 +99,103 @@ export default function App() {
   const getCacheKey = (y: string, m: string) => `handball_schedule_v18_${y}_${m}`;
   const getSavedKey = (y: string, m: string) => `handball_saved_v18_${y}_${m}`;
 
+  const fetchScheduleFallback = async (y: string, m: string): Promise<ScheduleData | null> => {
+    const targetUrl = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${y}&DS_MONTH=${m}&GROUP_CD=`;
+    const proxyUrls = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+      `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`
+    ];
+
+    for (const pUrl of proxyUrls) {
+      try {
+        const res = await axios.get(pUrl, { timeout: 12000 });
+        if (typeof res.data === 'string' && res.data.includes("table_wrap")) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(res.data, "text/html");
+          const matches: Match[] = [];
+          let currentTournament = "";
+          let currentDate = "";
+
+          const rows = doc.querySelectorAll(".table_wrap table tbody tr");
+          rows.forEach((element) => {
+            const tds = element.querySelectorAll("td");
+            const th = element.querySelector("th");
+
+            if (th) {
+              currentTournament = th.textContent?.trim() || "";
+            }
+
+            let timeOffset = 0;
+            if (tds.length >= 8) {
+              const dateText = tds[0]?.textContent?.replace(/\s+/g, ' ').trim() || "";
+              if (dateText && (dateText.includes('.') || dateText.includes('-'))) {
+                currentDate = dateText;
+              }
+              timeOffset = 1;
+            }
+
+            const timeText = tds[0 + timeOffset]?.textContent?.trim() || "";
+            const timeMatch = timeText.match(/([012]\d:[0-5]\d)/);
+            const time = timeMatch ? timeMatch[1] : "";
+
+            const scoreCell = tds[1 + timeOffset];
+            if (!scoreCell) return;
+            const teamA = scoreCell.querySelector(".team.home .name")?.textContent?.trim() || "";
+            const teamB = scoreCell.querySelector(".team.away .name")?.textContent?.trim() || "";
+            const score = scoreCell.querySelector(".score")?.textContent?.trim() || "";
+
+            const categoryBase = tds[2 + timeOffset]?.textContent?.trim() || "";
+            const remarks = tds[5 + timeOffset]?.textContent?.trim() || "";
+            let category = categoryBase;
+            if (remarks && remarks !== "기록지" && remarks !== "-" && !category.includes(remarks)) {
+              category = `${category} - ${remarks}`;
+            }
+
+            const venue = tds[3 + timeOffset]?.textContent?.trim() || "";
+            const detailUrlRaw = scoreCell.querySelector(".score")?.getAttribute("href");
+            let detailUrl: string | null = null;
+            if (detailUrlRaw && detailUrlRaw !== "#" && !detailUrlRaw.startsWith("javascript")) {
+              try {
+                detailUrl = new URL(detailUrlRaw, "https://khf.handballkorea.com/competition/schedule_list.php").href;
+              } catch (e) {
+                detailUrl = null;
+              }
+            }
+            const id = detailUrl ? new URLSearchParams(detailUrl.split('?')[1]).get('GAME_CD') || Math.random().toString(36).substring(2, 11) : Math.random().toString(36).substring(2, 11);
+
+            if (teamA && teamB) {
+              matches.push({
+                id,
+                date: `${currentDate} ${time}`.trim(),
+                teamA,
+                teamB,
+                score: score || "VS",
+                category: category || "기타",
+                venue,
+                detailUrl
+              });
+            }
+          });
+
+          const uniqueMatches = Array.from(new Map(matches.map(m => [`${m.teamA}-${m.teamB}-${m.date}`, m])).values());
+          uniqueMatches.sort((a, b) => {
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return b.date.localeCompare(a.date);
+          });
+
+          return {
+            tournamentName: currentTournament || "조회된 대회 없음",
+            matches: uniqueMatches
+          };
+        }
+      } catch (err) {
+        console.warn("Fallback proxy attempt failed:", err);
+      }
+    }
+    return null;
+  };
+
   const fetchData = async (y: string, m: string, isRefetch = false) => {
     const savedKey = getSavedKey(y, m);
     const cacheKey = getCacheKey(y, m);
@@ -121,10 +218,30 @@ export default function App() {
 
     setLoading(true);
     try {
-      const response = await axios.get(`/api/schedule?year=${y}&month=${m}`);
-      const fetchedData = response.data;
-      setData(fetchedData);
-      localStorage.setItem(cacheKey, JSON.stringify(fetchedData));
+      let fetchedData: ScheduleData | null = null;
+      try {
+        const response = await axios.get(`/api/schedule?year=${y}&month=${m}`, { timeout: 15000 });
+        if (response.data && response.data.matches && response.data.matches.length > 0) {
+          fetchedData = response.data;
+        } else if (response.data && response.data.tournamentName && response.data.tournamentName !== "조회된 대회 없음") {
+          fetchedData = response.data;
+        }
+      } catch (apiErr) {
+        console.warn("API route failed, trying client-side fallback proxy...", apiErr);
+      }
+
+      // If backend API returned empty or failed (such as on Vercel static or blocked IP)
+      if (!fetchedData || !fetchedData.matches || fetchedData.matches.length === 0) {
+        const fallbackData = await fetchScheduleFallback(y, m);
+        if (fallbackData) {
+          fetchedData = fallbackData;
+        }
+      }
+
+      if (fetchedData) {
+        setData(fetchedData);
+        localStorage.setItem(cacheKey, JSON.stringify(fetchedData));
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -642,7 +759,7 @@ export default function App() {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
-              <img src="/src/assets/images/handball_icon_1792316517852.jpg" alt="Logo" className="w-7 h-7" />
+              <img src="/handball_icon.png" alt="Logo" className="w-7 h-7" />
             </div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">경기 일정/결과</h1>
           </div>

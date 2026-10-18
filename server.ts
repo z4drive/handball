@@ -21,6 +21,42 @@ async function startServer() {
     'Referer': 'https://khf.handballkorea.com/'
   };
 
+  async function fetchHtml(targetUrl: string): Promise<string> {
+    try {
+      const res = await axios.get(targetUrl, {
+        headers: scrapingHeaders,
+        timeout: 10000
+      });
+      if (res.data && typeof res.data === 'string' && res.data.length > 200) {
+        return res.data;
+      }
+    } catch (err: any) {
+      console.warn("Direct fetch failed, trying proxy...", err?.message);
+    }
+
+    try {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+      const res = await axios.get(proxyUrl, { timeout: 12000 });
+      if (res.data && typeof res.data === 'string') {
+        return res.data;
+      }
+    } catch (err: any) {
+      console.warn("Proxy 1 fetch failed:", err?.message);
+    }
+
+    try {
+      const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
+      const res = await axios.get(proxyUrl, { timeout: 12000 });
+      if (res.data && typeof res.data === 'string') {
+        return res.data;
+      }
+    } catch (err: any) {
+      console.warn("Proxy 2 fetch failed:", err?.message);
+    }
+
+    throw new Error("데이터를 가져올 수 없습니다.");
+  }
+
   // API Route for crawling
   app.get("/api/schedule", async (req, res) => {
     try {
@@ -29,12 +65,8 @@ async function startServer() {
       // Using empty GROUP_CD to fetch all categories at once
       const url = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${year}&DS_MONTH=${month}&GROUP_CD=`;
       
-      const response = await axios.get(url, {
-        headers: scrapingHeaders,
-        timeout: 20000
-      });
-
-      const $ = cheerio.load(response.data);
+      const html = await fetchHtml(url);
+      const $ = cheerio.load(html);
       const matches: any[] = [];
       let currentTournament = "";
       let currentDate = "";
