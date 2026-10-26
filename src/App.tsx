@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu, ChevronDown, Home, ChevronRight, ArrowUp, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -90,6 +90,259 @@ export default function App() {
   const [playerPortalInfo, setPlayerPortalInfo] = useState<any | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [showPortalTab, setShowPortalTab] = useState(false);
+
+  // 용어설명 팝업 상태 (선택된 단일 용어만 용어 위치 바로 위에 팝업)
+  const [activeTerm, setActiveTerm] = useState<{ 
+    title: string; 
+    desc: string; 
+    rect?: { top: number; left: number; bottom: number; right: number; width: number; height: number }; 
+  } | null>(null);
+
+  // 학교명 뒤 축약 표시 함수 (대학교->대, 고등학교->고, 중학교->중, 초등학교->초)
+  const formatSchoolName = (name?: string): string => {
+    if (!name) return "";
+    return name
+      .replace(/여자고등학교/g, "여고")
+      .replace(/고등학교/g, "고")
+      .replace(/여자중학교/g, "여중")
+      .replace(/중학교/g, "중")
+      .replace(/초등학교/g, "초")
+      .replace(/대학교/g, "대");
+  };
+
+  // 용어사전 (사용자 첨부 이미지 용어설명 기준 매핑)
+  const TERM_EXPLANATIONS: Record<string, { title: string; desc: string }> = {
+    "6PM": { title: "6PM", desc: "6PM득점" },
+    "6M": { title: "6M", desc: "6m득점 (6PM)" },
+    "TOTAL SHOOTS": { title: "Total shoots", desc: "슛성공률" },
+    "2MIN": { title: "2MIN", desc: "2분퇴장" },
+    "2'": { title: "2'", desc: "2분퇴장" },
+    "AS": { title: "AS", desc: "어시스트" },
+    "WING": { title: "Wing", desc: "윙 득점" },
+    "6PM SHOOTS": { title: "6PM shoots", desc: "6m성공률" },
+    "6M SHOOTS": { title: "6m shoots", desc: "6m성공률" },
+    "RC": { title: "RC", desc: "레드카드" },
+    "TF": { title: "TF", desc: "실책" },
+    "9PM": { title: "9PM", desc: "9PM득점" },
+    "9M": { title: "9M", desc: "9m득점 (9PM)" },
+    "WING SHOOTS": { title: "Wing shoots", desc: "윙슛성공률" },
+    "DR": { title: "DR", desc: "블루카드" },
+    "BC": { title: "BC", desc: "블루카드" },
+    "REP": { title: "Report", desc: "블루카드 (보고서 제출 퇴장)" },
+    "ST": { title: "ST", desc: "스틸" },
+    "7PM": { title: "7PM", desc: "7PM득점" },
+    "7M": { title: "7M", desc: "7m득점 (7PM)" },
+    "9PM SHOOTS": { title: "9PM shoots", desc: "9m성공률" },
+    "9M SHOOTS": { title: "9m shoots", desc: "9m성공률" },
+    "RUN": { title: "RUN", desc: "러닝타임" },
+    "TIME": { title: "Time", desc: "러닝타임" },
+    "BS": { title: "BS", desc: "블록슛" },
+    "BD": { title: "BD", desc: "블록된 슛" },
+    "FB": { title: "FB", desc: "속공" },
+    "FAST SHOOTS": { title: "Fast shoots", desc: "속공성공률" },
+    "7PM SHOOTS": { title: "7PM shoots", desc: "7m성공률" },
+    "7M SHOOTS": { title: "7m shoots", desc: "7m성공률" },
+    "RB": { title: "RB", desc: "리바운드" },
+    "YC": { title: "YC", desc: "옐로우카드" },
+    "BT": { title: "BT", desc: "돌파득점" },
+    "G/S": { title: "G/S", desc: "골 / 슛시도" },
+    "%": { title: "%", desc: "슛성공률" },
+    "NO.": { title: "No.", desc: "등번호" },
+    "NAME": { title: "Name", desc: "선수명" },
+  };
+
+  const getTermExplanation = (rawKey: string): { title: string; desc: string } => {
+    const clean = rawKey.trim();
+    const upper = clean.toUpperCase();
+    if (TERM_EXPLANATIONS[upper]) return TERM_EXPLANATIONS[upper];
+    if (TERM_EXPLANATIONS[clean]) return TERM_EXPLANATIONS[clean];
+    if (upper.includes("TOTAL SHOOT")) return { title: clean, desc: "슛성공률" };
+    if (upper.includes("6M") || upper.includes("6PM")) {
+      return upper.includes("SHOOT") ? { title: clean, desc: "6m성공률" } : { title: clean, desc: "6PM득점" };
+    }
+    if (upper.includes("9M") || upper.includes("9PM")) {
+      return upper.includes("SHOOT") ? { title: clean, desc: "9m성공률" } : { title: clean, desc: "9PM득점" };
+    }
+    if (upper.includes("7M") || upper.includes("7PM")) {
+      return upper.includes("SHOOT") ? { title: clean, desc: "7m성공률" } : { title: clean, desc: "7PM득점" };
+    }
+    if (upper.includes("WING")) {
+      return upper.includes("SHOOT") ? { title: clean, desc: "윙슛성공률" } : { title: clean, desc: "윙 득점" };
+    }
+    if (upper.includes("FAST") || upper.includes("FB")) {
+      return upper.includes("SHOOT") ? { title: clean, desc: "속공성공률" } : { title: clean, desc: "속공" };
+    }
+    if (upper.includes("BT")) return { title: clean, desc: "돌파득점" };
+    if (upper.includes("2MIN") || upper === "2'") return { title: clean, desc: "2분퇴장" };
+    if (upper.includes("RC")) return { title: clean, desc: "레드카드" };
+    if (upper.includes("YC")) return { title: clean, desc: "옐로우카드" };
+    if (upper.includes("DR") || upper.includes("BC")) return { title: clean, desc: "블루카드" };
+    if (upper.includes("TF")) return { title: clean, desc: "실책" };
+    if (upper.includes("AS")) return { title: clean, desc: "어시스트" };
+    if (upper.includes("ST")) return { title: clean, desc: "스틸" };
+    if (upper.includes("BS")) return { title: clean, desc: "블록슛" };
+    if (upper.includes("BD")) return { title: clean, desc: "블록된 슛" };
+    if (upper.includes("RB")) return { title: clean, desc: "리바운드" };
+    if (upper.includes("RUN") || upper.includes("TIME")) return { title: clean, desc: "러닝타임" };
+    return { title: clean, desc: clean };
+  };
+
+  const handleOpenTerm = (termKey: string, e?: React.MouseEvent) => {
+    const item = getTermExplanation(termKey);
+    let rect: { top: number; left: number; bottom: number; right: number; width: number; height: number } | undefined;
+    if (e && e.currentTarget) {
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      rect = {
+        top: r.top,
+        left: r.left,
+        bottom: r.bottom,
+        right: r.right,
+        width: r.width,
+        height: r.height,
+      };
+    }
+    setActiveTerm({ ...item, rect });
+  };
+
+  const handleCloseTerm = () => {
+    // 용어 설명 팝업 닫기: 히스토리 뒤로가기를 호출하지 않고 팝업만 닫아 상세화면에 그대로 머무름
+    setActiveTerm(null);
+  };
+
+  // 용어 설명 팝업 렌더링 (블러효과 제거, 투명 배경으로 뒤가 보임, 용어 글자 위쪽에 안가리게 팝업 띄움)
+  const renderTermExplanationPopup = () => {
+    if (!activeTerm) return null;
+
+    const rect = activeTerm.rect;
+    let cardStyle: React.CSSProperties = {};
+    let isAbove = true;
+
+    if (rect) {
+      const termCenterX = rect.left + rect.width / 2;
+      const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 380;
+      const screenHeight = typeof window !== 'undefined' ? window.innerHeight : 600;
+      
+      // 상단 공간이 90px 이상이면 용어 글자 위쪽, 부족하면 글자 아래쪽에 띄움
+      isAbove = rect.top >= 90;
+
+      // 팝업 카드가 모바일 화면 양옆으로 벗어나지 않도록 클램핑
+      const popupHalfWidth = 85;
+      const clampedLeft = Math.max(popupHalfWidth + 12, Math.min(screenWidth - popupHalfWidth - 12, termCenterX));
+
+      if (isAbove) {
+        // 글자 위쪽에 글자를 가리지 않게 띄움 (글자 위 8px 간격)
+        cardStyle = {
+          position: 'fixed',
+          left: `${clampedLeft}px`,
+          bottom: `${Math.max(12, screenHeight - rect.top + 8)}px`,
+          transform: 'translateX(-50%)',
+        };
+      } else {
+        // 글자 아래쪽에 글자를 가리지 않게 띄움 (글자 아래 8px 간격)
+        cardStyle = {
+          position: 'fixed',
+          left: `${clampedLeft}px`,
+          top: `${Math.max(12, rect.bottom + 8)}px`,
+          transform: 'translateX(-50%)',
+        };
+      }
+    } else {
+      cardStyle = {
+        position: 'fixed',
+        left: '50%',
+        top: '40%',
+        transform: 'translate(-50%, -50%)',
+      };
+    }
+
+    return (
+      <div 
+        className="fixed inset-0 z-[120] bg-transparent"
+        onClick={handleCloseTerm}
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          style={cardStyle}
+          className="relative bg-white rounded-2xl p-3.5 shadow-2xl border border-slate-200/90 text-center space-y-1.5 animate-in zoom-in-95 duration-150 min-w-[150px] max-w-[240px] pointer-events-auto"
+        >
+          <div className="flex items-center justify-between pb-1 border-b border-gray-100 gap-2">
+            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+              용어설명
+            </span>
+            <button 
+              onClick={handleCloseTerm}
+              className="text-gray-400 hover:text-gray-600 text-xs font-bold px-1 py-0.5 leading-none transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="py-0.5">
+            <div className="text-sm font-black text-slate-900 tracking-tight">
+              {activeTerm.title}
+            </div>
+            <div className="text-xs font-bold text-slate-700 mt-0.5">
+              {activeTerm.desc}
+            </div>
+          </div>
+          {/* 용어 위치 가리키는 꼬리 (글자 위쪽에 뜰 때) */}
+          {rect && isAbove && (
+            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white rotate-45 border-r border-b border-slate-200/90 shadow-2xs pointer-events-none" />
+          )}
+          {/* 용어 위치 가리키는 꼬리 (글자 아래쪽에 뜰 때) */}
+          {rect && !isAbove && (
+            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white rotate-45 border-l border-t border-slate-200/90 shadow-2xs pointer-events-none" />
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const handleClosePlayer = () => {
+    if (window.history.state?.modal === 'player') {
+      window.history.back();
+    } else {
+      setSelectedPlayer(null);
+      setPlayerPortalInfo(null);
+      setShowPortalTab(false);
+    }
+  };
+
+  const handleCloseDetail = () => {
+    if (window.history.state?.modal === 'matchDetail') {
+      window.history.back();
+    } else {
+      setMatchDetail(null);
+      setDetailLoading(false);
+      setActiveDetailTab('compare');
+    }
+  };
+
+  // 모바일 뒤로가기 버튼 클릭 시 앱이 닫히지 않고 직전 화면으로 이동
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      // 1. 용어 팝업이 열려있다면 용어 팝업 닫기
+      setActiveTerm(null);
+
+      const state = e.state;
+      if (!state || !state.modal) {
+        // 메인 화면으로 복귀
+        setSelectedPlayer(null);
+        setPlayerPortalInfo(null);
+        setShowPortalTab(false);
+        setMatchDetail(null);
+        setDetailLoading(false);
+        setActiveDetailTab('compare');
+      } else if (state.modal === 'matchDetail') {
+        // 경기 상세 화면 유지 (선수 기록 모달만 닫기)
+        setSelectedPlayer(null);
+        setPlayerPortalInfo(null);
+        setShowPortalTab(false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const schools = [
     "창원중앙고등학교", 
@@ -263,6 +516,7 @@ export default function App() {
   };
 
   const fetchDetail = async (url: string) => {
+    window.history.pushState({ modal: 'matchDetail' }, '');
     const cacheKey = `match_detail_${url}`;
     const cached = localStorage.getItem(cacheKey);
 
@@ -284,6 +538,9 @@ export default function App() {
   };
 
   const fetchPlayerHistory = async (playerName: string, teamName?: string, isRefetch = false) => {
+    if (!selectedPlayer) {
+      window.history.pushState({ modal: 'player' }, '');
+    }
     setSelectedPlayer(playerName);
     setSelectedPlayerTeam(teamName);
     
@@ -466,10 +723,7 @@ export default function App() {
         {/* Detail Page Header */}
         <div className="bg-white px-6 pt-8 pb-4 border-b border-gray-100 sticky top-0 z-50 flex items-center">
           <button 
-            onClick={() => {
-              setMatchDetail(null);
-              setActiveDetailTab('compare');
-            }}
+            onClick={handleCloseDetail}
             className="p-2 -ml-2 bg-gray-50 rounded-full text-slate-600 mr-4"
           >
             <ChevronDown className="w-6 h-6 rotate-90" />
@@ -496,39 +750,53 @@ export default function App() {
                 <div className="text-gray-400 text-sm font-medium">{matchDetail.matchInfo}</div>
               </div>
 
-              {/* Redesigned Scoreboard */}
-              <div className="flex items-center justify-center space-x-6 py-8 px-4 bg-white rounded-3xl border border-gray-50 shadow-xl shadow-slate-100/50">
+              {/* Professional Scoreboard */}
+              <div className="flex items-center justify-between py-6 px-4 bg-white rounded-3xl border border-gray-100 shadow-lg shadow-slate-100/60">
                 {/* Home */}
                 <div className="flex flex-col items-center flex-1">
-                  <div className={`text-5xl font-black mb-4 transition-all duration-500 ${
+                  <div className={`text-4xl sm:text-5xl font-black mb-2 transition-all duration-300 ${
                     (parseInt(matchDetail.totalScore.split(':')[0]) || 0) > (parseInt(matchDetail.totalScore.split(':')[1]) || 0) 
-                      ? 'text-red-600 scale-110' : 'text-slate-800'}`}>
+                      ? 'text-red-600 scale-105' : 'text-slate-800'}`}>
                     {matchDetail.totalScore.split(':')[0] || '0'}
                   </div>
-                  <span className="text-base font-black text-slate-800 text-center break-keep leading-tight px-2">{matchDetail.homeTeam}</span>
+                  <span className="text-sm sm:text-base font-black text-slate-800 text-center break-keep leading-tight px-1">
+                    {formatSchoolName(matchDetail.homeTeam)}
+                  </span>
                 </div>
 
-                {/* Periods */}
-                <div className="flex flex-col items-center space-y-3 min-w-[80px]">
-                  {matchDetail.periodScores.map((period, i) => (
-                    <div key={i} className="flex items-center space-x-3 bg-gray-50/80 px-3 py-1 rounded-full">
-                      <span className="text-xs font-bold text-slate-600">{period.home}</span>
-                      <span className="text-[10px] text-gray-300 font-black uppercase">{period.label}</span>
-                      <span className="text-xs font-bold text-slate-600">{period.away}</span>
+                {/* Center: Period Scores (전반전 / 후반전 각각 밑에 점수 표시) */}
+                <div className="flex flex-col items-center justify-center px-4 py-2.5 bg-slate-900 text-white rounded-2xl shadow-md min-w-[90px] space-y-1.5 border border-slate-800 mx-2">
+                  {matchDetail.periodScores && matchDetail.periodScores.length > 0 ? (
+                    matchDetail.periodScores.map((period, i) => (
+                      <div key={i} className="flex flex-col items-center w-full">
+                        <span className="text-[10px] font-bold text-slate-400 tracking-wider">
+                          {period.label}
+                        </span>
+                        <span className="text-sm font-black text-white tracking-widest tabular-nums mt-0.5">
+                          {period.home} : {period.away}
+                        </span>
+                        {i < matchDetail.periodScores.length - 1 && (
+                          <div className="w-10 h-px bg-slate-800 my-1"></div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center py-1">
+                      <span className="text-xs font-black text-slate-400 tracking-widest">VS</span>
                     </div>
-                  ))}
-                  <div className="w-full h-px bg-gray-100 my-2"></div>
-                  <div className="text-[10px] font-black text-gray-300 uppercase tracking-widest">SCOREBOARD</div>
+                  )}
                 </div>
 
                 {/* Away */}
                 <div className="flex flex-col items-center flex-1">
-                  <div className={`text-5xl font-black mb-4 transition-all duration-500 ${
+                  <div className={`text-4xl sm:text-5xl font-black mb-2 transition-all duration-300 ${
                     (parseInt(matchDetail.totalScore.split(':')[1]) || 0) > (parseInt(matchDetail.totalScore.split(':')[0]) || 0) 
-                      ? 'text-red-600 scale-110' : 'text-slate-800'}`}>
+                      ? 'text-red-600 scale-105' : 'text-slate-800'}`}>
                     {matchDetail.totalScore.split(':')[1] || '0'}
                   </div>
-                  <span className="text-base font-black text-slate-800 text-center break-keep leading-tight px-2">{matchDetail.awayTeam}</span>
+                  <span className="text-sm sm:text-base font-black text-slate-800 text-center break-keep leading-tight px-1">
+                    {formatSchoolName(matchDetail.awayTeam)}
+                  </span>
                 </div>
               </div>
 
@@ -556,9 +824,9 @@ export default function App() {
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {/* Team Header for comparison */}
                   <div className="flex items-center justify-between px-4 mb-4 bg-slate-50 py-3 rounded-2xl">
-                    <span className="text-xs font-black text-slate-800 flex-1">{matchDetail.homeTeam}</span>
+                    <span className="text-xs font-black text-slate-800 flex-1">{formatSchoolName(matchDetail.homeTeam)}</span>
                     <span className="text-[10px] font-black text-gray-300 mx-4">VS</span>
-                    <span className="text-xs font-black text-slate-800 flex-1 text-right">{matchDetail.awayTeam}</span>
+                    <span className="text-xs font-black text-slate-800 flex-1 text-right">{formatSchoolName(matchDetail.awayTeam)}</span>
                   </div>
 
                   {/* Comparison Bars */}
@@ -567,7 +835,12 @@ export default function App() {
                       <div key={i} className="flex flex-col items-center">
                         <div className="flex justify-between w-full mb-1.5 px-2">
                           <span className="text-xs font-black text-slate-700">{stat.home}</span>
-                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{stat.label}</span>
+                          <button 
+                            onClick={(e) => handleOpenTerm(stat.label, e)}
+                            className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-indigo-600 underline decoration-dotted decoration-gray-300 underline-offset-2"
+                          >
+                            {stat.label}
+                          </button>
                           <span className="text-xs font-black text-slate-700">{stat.away}</span>
                         </div>
                         <div className="flex items-center w-full space-x-1">
@@ -590,34 +863,7 @@ export default function App() {
                     ))}
                   </div>
 
-                  {/* Icon Stats (Cards/Major) */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {[
-                      { team: 'home', icons: matchDetail.homeIcons, name: matchDetail.homeTeam },
-                      { team: 'away', icons: matchDetail.awayIcons, name: matchDetail.awayTeam }
-                    ].map((t, idx) => (
-                      <div key={idx} className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm">
-                        <p className="text-[10px] font-black text-slate-400 mb-4 text-center truncate uppercase tracking-widest">{t.name}</p>
-                        <div className="grid grid-cols-3 gap-3">
-                          {Object.entries(t.icons).map(([type, val]) => (
-                            <div key={type} className="flex flex-col items-center">
-                              <div className={`w-6 h-7 rounded-md mb-1.5 flex items-center justify-center text-[10px] font-black text-white shadow-sm
-                                ${type === 'yc' ? 'bg-yellow-400' : 
-                                  type === 'min2' ? 'bg-indigo-500' : 
-                                  type === 'rc' ? 'bg-red-500' : 
-                                  type === 'bc' ? 'bg-blue-600' : 'bg-gray-400'}`}
-                              >
-                                {type === 'yc' ? 'Y' : type === 'min2' ? '2\'' : type === 'rc' ? 'R' : type === 'bc' ? 'B' : '?'}
-                              </div>
-                              <span className="text-[11px] font-black text-slate-800">{val}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Original table stats */}
+                  {/* Detailed Team Stats */}
                   <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
                     <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">Detailed Team Stats</span>
@@ -627,7 +873,12 @@ export default function App() {
                         <div key={i} className="flex items-center px-6 py-4 hover:bg-slate-50 transition-colors">
                           <div className="w-1/3 text-sm font-black text-slate-800">{stat.home}</div>
                           <div className="w-1/3 text-center">
-                            <span className="text-[10px] font-black text-gray-400 bg-gray-50 px-3 py-1 rounded-full uppercase">{stat.label}</span>
+                            <button 
+                              onClick={(e) => handleOpenTerm(stat.label, e)}
+                              className="text-[10px] font-black text-gray-400 bg-gray-50 px-3 py-1 rounded-full uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            >
+                              {stat.label}
+                            </button>
                           </div>
                           <div className="w-1/3 text-right text-sm font-black text-slate-800">{stat.away}</div>
                         </div>
@@ -645,87 +896,87 @@ export default function App() {
                       ].map((t, idx) => (
                         <div key={idx} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-xl shadow-slate-100">
                           <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
-                            <span className="text-sm font-black text-white">{t.name}</span>
+                            <span className="text-sm font-black text-white">{formatSchoolName(t.name)}</span>
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Player Roster</span>
                           </div>
                           <div className="overflow-x-auto scrollbar-hide">
-                            <table className="w-full text-left border-collapse min-w-[1200px]">
+                            <table className="w-full text-center border-collapse whitespace-nowrap min-w-max">
                               <thead>
-                                <tr className="bg-slate-50/50 border-b border-gray-100">
-                                  <th className="px-4 py-3 text-[10px] font-black text-gray-400 sticky left-0 bg-slate-50/50 z-10 uppercase tracking-widest">No.</th>
-                                  <th className="px-4 py-3 text-[10px] font-black text-gray-400 sticky left-[40px] bg-slate-50/50 z-10 border-r border-gray-100 uppercase tracking-widest">Name</th>
-                                  <th className="px-3 py-3 text-[10px] font-black text-gray-400 text-center uppercase">G/S</th>
-                                  <th className="px-3 py-3 text-[10px] font-black text-gray-400 text-center uppercase">%</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">6M</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">Wing</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">9M</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">7M</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">FB</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">BT</th>
-                                  <th className="px-3 py-3 text-[10px] font-black text-gray-400 text-center uppercase">AS</th>
-                                  <th className="px-3 py-3 text-[10px] font-black text-gray-400 text-center uppercase">TF</th>
-                                  <th className="px-3 py-3 text-[10px] font-black text-gray-400 text-center uppercase">BD</th>
-                                  <th className="px-3 py-3 text-[10px] font-black text-gray-400 text-center uppercase">BS</th>
-                                  <th className="px-3 py-3 text-[10px] font-black text-gray-400 text-center uppercase">ST</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">YC</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">2'</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">RC</th>
-                                  <th className="px-2 py-3 text-[10px] font-black text-gray-400 text-center uppercase">Rep</th>
-                                  <th className="px-4 py-3 text-[10px] font-black text-gray-400 text-center uppercase">Time</th>
+                                <tr className="bg-slate-50/80 border-b border-gray-100">
+                                  <th onClick={(e) => handleOpenTerm('No.', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 sticky left-0 bg-slate-50 z-20 cursor-pointer hover:text-indigo-600 uppercase min-w-[28px]">No.</th>
+                                  <th onClick={(e) => handleOpenTerm('Name', e)} className="px-1.5 py-2 text-[10px] font-black text-gray-400 sticky left-[28px] bg-slate-50 z-20 border-r border-gray-100 cursor-pointer hover:text-indigo-600 uppercase text-left min-w-[48px]">Name</th>
+                                  <th onClick={(e) => handleOpenTerm('G/S', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">G/S</th>
+                                  <th onClick={(e) => handleOpenTerm('%', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">%</th>
+                                  <th onClick={(e) => handleOpenTerm('6M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">6M</th>
+                                  <th onClick={(e) => handleOpenTerm('Wing', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Wing</th>
+                                  <th onClick={(e) => handleOpenTerm('9M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">9M</th>
+                                  <th onClick={(e) => handleOpenTerm('7M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">7M</th>
+                                  <th onClick={(e) => handleOpenTerm('FB', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">FB</th>
+                                  <th onClick={(e) => handleOpenTerm('BT', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BT</th>
+                                  <th onClick={(e) => handleOpenTerm('AS', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">AS</th>
+                                  <th onClick={(e) => handleOpenTerm('TF', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">TF</th>
+                                  <th onClick={(e) => handleOpenTerm('BD', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BD</th>
+                                  <th onClick={(e) => handleOpenTerm('BS', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BS</th>
+                                  <th onClick={(e) => handleOpenTerm('ST', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">ST</th>
+                                  <th onClick={(e) => handleOpenTerm('YC', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">YC</th>
+                                  <th onClick={(e) => handleOpenTerm("2'", e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">2'</th>
+                                  <th onClick={(e) => handleOpenTerm('RC', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">RC</th>
+                                  <th onClick={(e) => handleOpenTerm('Rep', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Rep</th>
+                                  <th onClick={(e) => handleOpenTerm('Time', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Time</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-50">
                                 {t.players.map((p, i) => (
                                   <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-4 py-4 text-xs font-black text-slate-400 sticky left-0 bg-white group-hover:bg-slate-50 z-10">{p.no}</td>
-                                    <td className="px-4 py-4 text-xs font-black text-indigo-600 sticky left-[40px] bg-white group-hover:bg-slate-50 z-10 border-r border-gray-100 whitespace-nowrap">
+                                    <td className="px-1 py-2 text-xs font-black text-slate-400 sticky left-0 bg-white group-hover:bg-slate-50 z-10 text-center">{p.no}</td>
+                                    <td className="px-1.5 py-2 text-xs font-black text-indigo-600 sticky left-[28px] bg-white group-hover:bg-slate-50 z-10 border-r border-gray-100 whitespace-nowrap text-left">
                                       <button 
                                         onClick={() => fetchPlayerHistory(p.name, t.name)}
-                                        className="hover:underline text-left"
+                                        className="hover:underline text-left font-bold"
                                       >
                                         {p.name}
                                       </button>
                                     </td>
                                     {p.isGoalie ? (
                                       <>
-                                        <td className="px-3 py-4 text-sm font-black text-slate-800 text-center">{p.gs}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-slate-400 text-center">{p.rate}%</td>
+                                        <td className="px-1 py-2 text-xs font-black text-slate-800 text-center">{p.gs}</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-400 text-center">{p.rate}%</td>
                                         <td colSpan={6} className="bg-gray-50/30"></td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.as}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.tf}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-slate-400 text-center"></td>
-                                        <td className="px-3 py-4 text-xs font-black text-slate-400 text-center"></td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.st}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.as}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.tf}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-slate-400 text-center"></td>
+                                        <td className="px-1 py-2 text-xs font-black text-slate-400 text-center"></td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.st}</td>
                                         <td colSpan={3}></td>
-                                        <td className="px-3 py-4 text-[10px] font-bold text-gray-400 text-center"></td>
-                                        <td className="px-4 py-4 text-[11px] font-bold text-slate-500 text-center">{p.playTime}</td>
+                                        <td className="px-1 py-2 text-[10px] font-bold text-gray-400 text-center"></td>
+                                        <td className="px-1 py-2 text-[10px] font-bold text-slate-500 text-center whitespace-nowrap">{p.playTime}</td>
                                       </>
                                     ) : (
                                       <>
-                                        <td className="px-3 py-4 text-sm font-black text-slate-800 text-center">{p.gs}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-slate-400 text-center">{p.rate}%</td>
-                                        <td className="px-2 py-4 text-[11px] font-bold text-slate-500 text-center">{p.m6}</td>
-                                        <td className="px-2 py-4 text-[11px] font-bold text-slate-500 text-center">{p.wing}</td>
-                                        <td className="px-2 py-4 text-[11px] font-bold text-slate-500 text-center">{p.m9}</td>
-                                        <td className="px-2 py-4 text-[11px] font-bold text-slate-500 text-center">{p.m7}</td>
-                                        <td className="px-2 py-4 text-[11px] font-bold text-slate-500 text-center">{p.fb}</td>
-                                        <td className="px-2 py-4 text-[11px] font-bold text-slate-500 text-center">{p.bt}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.as}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.tf}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.bd}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.bs}</td>
-                                        <td className="px-3 py-4 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.st}</td>
-                                        <td className="px-2 py-4 text-center">
-                                          {p.yc !== '0' && p.yc && <span className="w-5 h-5 bg-yellow-400 rounded-md inline-flex items-center justify-center text-[10px] text-white font-black shadow-sm">{p.yc}</span>}
+                                        <td className="px-1 py-2 text-xs font-black text-slate-800 text-center">{p.gs}</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-400 text-center">{p.rate}%</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.m6}</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.wing}</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.m9}</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.m7}</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.fb}</td>
+                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.bt}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.as}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.tf}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.bd}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.bs}</td>
+                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.st}</td>
+                                        <td className="px-1 py-2 text-center">
+                                          {p.yc !== '0' && p.yc && <span className="w-4 h-4 bg-yellow-400 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black shadow-2xs">{p.yc}</span>}
                                         </td>
-                                        <td className="px-2 py-4 text-center">
-                                          {p.m2 !== '0' && p.m2 && <span className="w-5 h-5 bg-indigo-500 rounded-md inline-flex items-center justify-center text-[10px] text-white font-black shadow-sm">{p.m2}</span>}
+                                        <td className="px-1 py-2 text-center">
+                                          {p.m2 !== '0' && p.m2 && <span className="w-4 h-4 bg-indigo-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black shadow-2xs">{p.m2}</span>}
                                         </td>
-                                        <td className="px-2 py-4 text-center">
-                                          {p.rc !== '0' && p.rc && <span className="w-5 h-5 bg-red-500 rounded-md inline-flex items-center justify-center text-[10px] text-white font-black shadow-sm">{p.rc}</span>}
+                                        <td className="px-1 py-2 text-center">
+                                          {p.rc !== '0' && p.rc && <span className="w-4 h-4 bg-red-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black shadow-2xs">{p.rc}</span>}
                                         </td>
-                                        <td className="px-2 py-4 text-[10px] font-bold text-gray-400 text-center">{p.report}</td>
-                                        <td className="px-4 py-4 text-[11px] font-bold text-slate-500 text-center">{p.playTime}</td>
+                                        <td className="px-1 py-2 text-[10px] font-bold text-gray-400 text-center">{p.report}</td>
+                                        <td className="px-1 py-2 text-[10px] font-bold text-slate-500 text-center whitespace-nowrap">{p.playTime}</td>
                                       </>
                                     )}
                                   </tr>
@@ -774,10 +1025,7 @@ export default function App() {
                       </p>
                     </div>
                     <button 
-                      onClick={() => {
-                        setSelectedPlayer(null);
-                        setShowPortalTab(false);
-                      }}
+                      onClick={handleClosePlayer}
                       className="p-3 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 transition-colors shadow-inner"
                     >
                       <ChevronDown className="w-6 h-6" />
@@ -975,7 +1223,7 @@ export default function App() {
                                 }}
                                 className="flex-1 text-sm font-black text-slate-800 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
                               >
-                                {h.teamA}
+                                {formatSchoolName(h.teamA)}
                               </div>
                               <div className="mx-6 flex items-center space-x-3">
                                 <span className={`text-xl font-black ${parseInt(h.score.split(':')[0]) > parseInt(h.score.split(':')[1]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score.split(':')[0]}</span>
@@ -992,7 +1240,7 @@ export default function App() {
                                 }}
                                 className="flex-1 text-sm font-black text-slate-800 text-right leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
                               >
-                                {h.teamB}
+                                {formatSchoolName(h.teamB)}
                               </div>
                             </div>
                             <div className="grid grid-cols-4 gap-4 pt-4 border-t border-gray-100/50">
@@ -1032,6 +1280,8 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+        {/* Term Explanation Popup (단일 용어 전용 팝업 - 블러 제거, 배경 보임, 글자 위쪽 팝업) */}
+        {renderTermExplanationPopup()}
       </div>
     );
   }
@@ -1205,13 +1455,13 @@ export default function App() {
                               <span className="text-[10px] font-bold text-gray-400">{m.venue}</span>
                             </div>
                             <div className="p-4 flex items-center justify-between">
-                              <div className="flex-1 text-sm font-bold text-slate-700 truncate">{m.teamA}</div>
+                              <div className="flex-1 text-sm font-bold text-slate-700 truncate">{formatSchoolName(m.teamA)}</div>
                               <div className="mx-6 flex items-center space-x-3 bg-red-50 px-3 py-1 rounded-full border border-red-100">
                                 <span className="text-base font-black text-red-600">{m.score.includes(':') ? m.score.split(':')[0] : '-'}</span>
                                 <span className="text-xs font-bold text-red-200">:</span>
                                 <span className="text-base font-black text-red-600">{m.score.includes(':') ? m.score.split(':')[1] : '-'}</span>
                               </div>
-                              <div className="flex-1 text-sm font-bold text-slate-700 text-right truncate">{m.teamB}</div>
+                              <div className="flex-1 text-sm font-bold text-slate-700 text-right truncate">{formatSchoolName(m.teamB)}</div>
                             </div>
                           </div>
                           
@@ -1269,7 +1519,7 @@ export default function App() {
                       
                       {/* Score Line */}
                       <div className="flex items-center justify-center w-full space-x-4">
-                        <span className="flex-1 text-right text-lg font-medium text-slate-800">{match.teamA}</span>
+                        <span className="flex-1 text-right text-lg font-medium text-slate-800">{formatSchoolName(match.teamA)}</span>
                         <div className="flex items-center space-x-2">
                           <span className="text-2xl font-bold text-red-600">
                             {match.score.includes(':') ? match.score.split(':')[0] : '-'}
@@ -1279,7 +1529,7 @@ export default function App() {
                             {match.score.includes(':') ? match.score.split(':')[1] : '-'}
                           </span>
                         </div>
-                        <span className="flex-1 text-left text-lg font-medium text-slate-800">{match.teamB}</span>
+                        <span className="flex-1 text-left text-lg font-medium text-slate-800">{formatSchoolName(match.teamB)}</span>
                       </div>
 
                       {/* Group Info (category) */}
@@ -1364,7 +1614,7 @@ export default function App() {
                     <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">Season Match History</p>
                   </div>
                   <button 
-                    onClick={() => setSelectedPlayer(null)}
+                    onClick={handleClosePlayer}
                     className="p-3 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 transition-colors shadow-inner"
                   >
                     <ChevronDown className="w-6 h-6" />
@@ -1411,7 +1661,7 @@ export default function App() {
                             }}
                             className="flex-1 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 hover:underline"
                           >
-                            {h.teamA}
+                            {formatSchoolName(h.teamA)}
                           </div>
                           <div className="mx-4 flex items-center space-x-2">
                             <span className={`text-sm font-black ${h.score.split(':')[0] > h.score.split(':')[1] ? 'text-indigo-600' : 'text-slate-400'}`}>{h.score.split(':')[0]}</span>
@@ -1428,7 +1678,7 @@ export default function App() {
                             }}
                             className="flex-1 text-sm font-bold text-slate-700 text-right cursor-pointer hover:text-indigo-600 hover:underline"
                           >
-                            {h.teamB}
+                            {formatSchoolName(h.teamB)}
                           </div>
                         </div>
                         <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-100">
@@ -1462,6 +1712,8 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Term Explanation Popup */}
+      {renderTermExplanationPopup()}
     </div>
   );
 }
