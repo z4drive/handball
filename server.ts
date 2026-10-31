@@ -285,12 +285,20 @@ async function startServer() {
                     no,
                     name,
                     isGoalie: true,
-                    rate: statsTds.eq(0).text().trim(),
-                    gs: statsTds.eq(1).text().trim(), // SV/S
-                    as: statsTds.eq(2).text().trim(),
-                    tf: statsTds.eq(3).text().trim(),
-                    st: statsTds.eq(4).text().trim(),
-                    playTime: statsTds.eq(5).text().trim(),
+                    rate: statsTds.eq(0).text().trim(), // 방어율
+                    sv: statsTds.eq(1).text().trim(),   // SV
+                    gkg: statsTds.eq(2).text().trim(),  // GKG
+                    gkas: statsTds.eq(3).text().trim(), // GKAS
+                    wing: statsTds.eq(4).text().trim(), // Wing
+                    m6: statsTds.eq(5).text().trim(),   // 6m
+                    m9: statsTds.eq(6).text().trim(),   // 9m
+                    m7: statsTds.eq(7).text().trim(),   // 7m
+                    fb: statsTds.eq(8).text().trim(),   // FB
+                    bt: statsTds.eq(9).text().trim(),   // BT
+                    high: statsTds.eq(10).text().trim(),// High
+                    mid: statsTds.eq(11).text().trim(), // Mid
+                    low: statsTds.eq(12).text().trim(), // Low
+                    gs: statsTds.eq(1).text().trim(),
                   });
                 } else {
                   players.push({ 
@@ -389,10 +397,19 @@ async function startServer() {
     const a = normalizeSchool(schoolA);
     const b = normalizeSchool(schoolB);
     if (!a || !b) return false;
+    if (a === b) return true;
+
+    // 학교 레벨 구분 (고, 여고, 중, 여중, 초, 대)
+    const levelA = a.match(/(여고|고|여중|중|초|대)$/)?.[1] || "";
+    const levelB = b.match(/(여고|고|여중|중|초|대)$/)?.[1] || "";
+    if (levelA && levelB && levelA !== levelB) {
+      return false;
+    }
+
     if (a.includes(b) || b.includes(a)) return true;
-    const rootA = a.replace(/(고|여고|중|여중|초|대)$/, "");
-    const rootB = b.replace(/(고|여고|중|여중|초|대)$/, "");
-    if (rootA && rootB && (rootA.includes(rootB) || rootB.includes(rootA))) return true;
+    const rootA = a.replace(/(여고|고|여중|중|초|대)$/, "");
+    const rootB = b.replace(/(여고|고|여중|중|초|대)$/, "");
+    if (rootA && rootB && (rootA === rootB || rootA.includes(rootB) || rootB.includes(rootA))) return true;
     return false;
   }
 
@@ -628,12 +645,19 @@ async function startServer() {
         }
       }
 
-      // 만약 등록된 선수가 있고 personNo가 있다면, 일치하는 선수의 세부 등록이력 조회
+      // 만약 등록된 선수가 있고 personNo가 있다면, 일치하는 선수의 세부 등록이력 및 최근 경기실적 조회
       let detailedHistories: any[] = [];
+      let recentMatchRecords: any[] = [];
+
       if (playerList.length > 0 && playerList[0].personNo) {
         try {
           const detailRes = await axios.post("https://g1.sports.or.kr/stat/playerSearchResult.do", 
             new URLSearchParams({
+              gubun: "P",
+              searchClassCd: "HB",
+              searchSidoCd: "",
+              searchSexCd: "",
+              searchName: name as string,
               classCd: playerList[0].classCd || "HB",
               personNo: playerList[0].personNo
             }).toString(),
@@ -644,34 +668,78 @@ async function startServer() {
                 "Referer": searchUrl,
                 "Origin": "https://g1.sports.or.kr"
               },
-              timeout: 8000
+              timeout: 10000
             }
           );
 
           const $d = cheerio.load(detailRes.data);
-          $d("table tbody tr").each((_, tr) => {
-            const tds = $d(tr).find("td");
-            if (tds.length >= 6) {
-              const year = $d(tds[0]).text().trim();
-              const sport = $d(tds[1]).text().trim();
-              const category = $d(tds[2]).text().trim();
-              const sido = $d(tds[3]).text().trim();
-              const team = $d(tds[4]).text().trim();
-              const regType = $d(tds[5]).text().trim();
-              if (/^\d{4}$/.test(year) && sport) {
-                detailedHistories.push({
-                  year,
-                  sport,
-                  category,
-                  sido,
-                  team,
-                  regType
-                });
-              }
+          
+          $d(".lookup").each((_, lookup) => {
+            const title = $d(lookup).find(".lookup-header__title").text().trim();
+            
+            // 1. 등록이력 파싱
+            if (title.includes("등록이력")) {
+              $d(lookup).find("table tbody tr").each((_, tr) => {
+                const tds = $d(tr).find("td");
+                if (tds.length >= 6) {
+                  const year = $d(tds[0]).text().trim();
+                  const sport = $d(tds[1]).text().trim();
+                  const category = $d(tds[2]).text().trim();
+                  const sido = $d(tds[3]).text().trim();
+                  const team = $d(tds[4]).text().trim();
+                  const regType = $d(tds[5]).text().trim();
+                  if (/^\d{4}$/.test(year) && sport) {
+                    detailedHistories.push({
+                      year,
+                      sport,
+                      category,
+                      sido,
+                      team,
+                      regType
+                    });
+                  }
+                }
+              });
+            }
+
+            // 2. 최근 경기실적 파싱 (사용자 첨부 이미지 1에 해당하는 테이블)
+            if (title.includes("최근 경기실적")) {
+              $d(lookup).find("table tbody tr").each((_, tr) => {
+                const tds = $d(tr).find("td");
+                if (tds.length >= 10) {
+                  const period = $d(tds[0]).text().replace(/\s+/g, ' ').trim();
+                  const type = $d(tds[1]).text().trim();
+                  const tournament = $d(tds[2]).text().trim();
+                  const venue = $d(tds[3]).text().trim();
+                  const teamCount = $d(tds[4]).text().trim();
+                  const matchType = $d(tds[5]).text().trim();
+                  const played = $d(tds[6]).text().trim();
+                  const position = $d(tds[7]).text().trim();
+                  const category = $d(tds[8]).text().trim();
+                  const rank = $d(tds[9]).text().trim();
+                  const remark = tds.length >= 11 ? $d(tds[10]).text().trim() : "";
+
+                  if (period && tournament) {
+                    recentMatchRecords.push({
+                      period,
+                      type,
+                      tournament,
+                      venue,
+                      teamCount,
+                      matchType,
+                      played,
+                      position,
+                      category,
+                      rank,
+                      remark
+                    });
+                  }
+                }
+              });
             }
           });
         } catch (detailErr) {
-          console.error("[PlayerInfo] Error fetching detail history:", detailErr);
+          console.error("[PlayerInfo] Error fetching detail history & match records:", detailErr);
         }
       }
 
@@ -680,7 +748,8 @@ async function startServer() {
         source: "https://g1.sports.or.kr/stat/playerSearch.do?gubun=P",
         name,
         players: playerList,
-        detailedHistories
+        detailedHistories,
+        recentMatchRecords
       });
     } catch (error: any) {
       console.error("[PlayerInfo] Error:", error.message);
@@ -688,6 +757,140 @@ async function startServer() {
         error: "대한체육회 선수 정보를 조회하지 못했습니다.",
         message: error.message 
       });
+    }
+  });
+
+  // 앱 버전 확인 엔드포인트 (소스 수정 시 업데이트 알림 및 재실행용)
+  const APP_VERSION = "2026.10.31-v6";
+  app.get("/api/app-version", (req, res) => {
+    res.json({ version: APP_VERSION, timestamp: Date.now() });
+  });
+
+  // 웹/구글 검색 헬퍼 (최근 실적 및 역대 기록 구글링)
+  async function searchWeb(query: string, limit = 6): Promise<any[]> {
+    const results: any[] = [];
+    try {
+      const duckUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const duckRes = await axios.get(duckUrl, {
+        headers: scrapingHeaders,
+        timeout: 7000
+      });
+      const $d = cheerio.load(duckRes.data);
+      $d(".result").each((i, el) => {
+        if (results.length < limit) {
+          const title = $d(el).find(".result__title").text().trim();
+          const snippet = $d(el).find(".result__snippet").text().trim();
+          const link = $d(el).find(".result__url").text().trim();
+          if (title && snippet) {
+            results.push({ title, snippet, link });
+          }
+        }
+      });
+    } catch (err) {
+      console.warn("searchWeb error for query:", query, err);
+    }
+    return results;
+  }
+
+  // 선수 구글링 및 역대/최근 경기 실적 정보 제공 엔드포인트
+  app.get("/api/player-extra-records", async (req, res) => {
+    try {
+      const name = (req.query.name as string || "").trim();
+      const team = (req.query.team as string || "").trim();
+      if (!name) return res.status(400).json({ error: "선수명이 필요합니다." });
+
+      const recentQuery = `핸드볼 ${team ? `${team} ` : ""}${name} 최근 경기 실적 대회`;
+      const careerQuery = `핸드볼 ${team ? `${team} ` : ""}${name} 역대 기록 수상 대회 이력`;
+
+      const [recentSearchResults, careerSearchResults] = await Promise.all([
+        searchWeb(recentQuery, 6),
+        searchWeb(careerQuery, 6)
+      ]);
+
+      res.json({
+        success: true,
+        name,
+        team,
+        recentSearchResults: recentSearchResults.length > 0 ? recentSearchResults : careerSearchResults,
+        careerSearchResults: careerSearchResults.length > 0 ? careerSearchResults : recentSearchResults,
+        searchResults: recentSearchResults.concat(careerSearchResults).slice(0, 8)
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: "선수 기록 정보를 검색하지 못했습니다." });
+    }
+  });
+
+  // 학교 최근 경기 실적 및 구글링 정보 제공 엔드포인트
+  app.get("/api/school-matches", async (req, res) => {
+    try {
+      const name = (req.query.name as string || "").trim();
+      if (!name) return res.status(400).json({ error: "학교명이 필요합니다." });
+
+      const years = [2026, 2025];
+      let matches: any[] = [];
+
+      for (const year of years) {
+        try {
+          const url = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${year}&DS_MONTH=ALL`;
+          const response = await axios.get(url, { headers: scrapingHeaders, timeout: 12000 });
+          const $ = cheerio.load(response.data);
+          let currentTournament = "";
+          let currentDate = "";
+
+          $(".table_wrap table tbody tr").each((_, tr) => {
+            const th = $(tr).find("th");
+            if (th.length > 0) currentTournament = th.text().trim();
+            const tds = $(tr).find("td");
+            let timeOffset = 0;
+            if (tds.length >= 8) {
+              const dt = $(tds[0]).text().replace(/\s+/g, ' ').trim();
+              if (dt && (dt.includes('.') || dt.includes('-'))) currentDate = dt;
+              timeOffset = 1;
+            }
+            const time = $(tds[0 + timeOffset]).text().trim();
+            const scoreCell = $(tds[1 + timeOffset]);
+            const teamA = scoreCell.find(".team.home .name").text().trim();
+            const teamB = scoreCell.find(".team.away .name").text().trim();
+            const score = scoreCell.find(".score").text().trim();
+            const detailUrlRaw = scoreCell.find(".score").attr("href");
+            let detailUrl = null;
+            if (detailUrlRaw && detailUrlRaw !== "#" && !detailUrlRaw.startsWith("javascript")) {
+              try {
+                detailUrl = new URL(detailUrlRaw, "https://khf.handballkorea.com/competition/schedule_list.php").href;
+              } catch (e) {}
+            }
+            if (teamA && teamB && (isSchoolMatch(teamA, name) || isSchoolMatch(teamB, name))) {
+              matches.push({
+                tournament: currentTournament || `${year}년 대회`,
+                date: `${currentDate} ${time}`.trim(),
+                teamA,
+                teamB,
+                score: score || "VS",
+                detailUrl
+              });
+            }
+          });
+        } catch (e) {
+          console.warn(`[SchoolMatches] fetch error for ${year}:`, e);
+        }
+      }
+
+      // 구글링 학교 최근 경기 실적 및 뉴스
+      const searchQuery = `핸드볼 ${name} 최근 경기 실적 대회 결과`;
+      const searchResults = await searchWeb(searchQuery, 6);
+
+      // 최신순 정렬
+      matches.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+      res.json({
+        success: true,
+        school: name,
+        matches,
+        searchResults
+      });
+    } catch (error: any) {
+      console.error("[SchoolMatches] Error:", error);
+      res.status(500).json({ error: "학교 경기 실적을 불러오지 못했습니다." });
     }
   });
 

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Menu, ChevronDown, Home, ChevronRight, ArrowUp, ExternalLink } from 'lucide-react';
+import { Menu, ChevronDown, Home, ChevronRight, ArrowUp, ExternalLink, X, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 
@@ -86,10 +86,26 @@ export default function App() {
   const [playerHistory, setPlayerHistory] = useState<any[]>([]);
   const [playerLoading, setPlayerLoading] = useState(false);
   
-  // 대한체육회 스포츠지원포털 선수정보 상태
+  // 선수 모달 탭 상태: 'registration'(등록이력) | 'recent'(최근경기실적) | 'career'(역대기록)
+  const [playerModalTab, setPlayerModalTab] = useState<'registration' | 'recent' | 'career'>('registration');
   const [playerPortalInfo, setPlayerPortalInfo] = useState<any | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [showPortalTab, setShowPortalTab] = useState(false);
+  const [playerExtraRecords, setPlayerExtraRecords] = useState<any | null>(null);
+  const [extraRecordsLoading, setExtraRecordsLoading] = useState(false);
+
+  // 웹앱 업데이트 감지 상태 (소스 수정 후 실행 시 업데이트 알림)
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  const handleClosePlayer = () => {
+    if (window.history.state?.modal === 'player') {
+      window.history.back();
+    } else {
+      setSelectedPlayer(null);
+      setPlayerPortalInfo(null);
+      setShowPortalTab(false);
+    }
+  };
 
   // 용어설명 팝업 상태 (선택된 단일 용어만 용어 위치 바로 위에 팝업)
   const [activeTerm, setActiveTerm] = useState<{ 
@@ -108,6 +124,87 @@ export default function App() {
       .replace(/중학교/g, "중")
       .replace(/초등학교/g, "초")
       .replace(/대학교/g, "대");
+  };
+
+  // 학교명 정규화 및 일치 여부 확인 함수 (동일이름 선수 구분 및 중/고/대 분리)
+  const normalizeSchool = (str?: string): string => {
+    if (!str) return "";
+    return str
+      .replace(/\s+/g, "")
+      .replace(/여자고등학교/g, "여고")
+      .replace(/고등학교/g, "고")
+      .replace(/여자중학교/g, "여중")
+      .replace(/중학교/g, "중")
+      .replace(/초등학교/g, "초")
+      .replace(/대학교/g, "대")
+      .replace(/학교/g, "");
+  };
+
+  const isSchoolMatch = (schoolA?: string, schoolB?: string): boolean => {
+    if (!schoolA || !schoolB) return false;
+    const a = normalizeSchool(schoolA);
+    const b = normalizeSchool(schoolB);
+    if (!a || !b) return false;
+    if (a === b) return true;
+
+    // 학교 레벨 구분 (고, 여고, 중, 여중, 초, 대)
+    const levelA = a.match(/(여고|고|여중|중|초|대)$/)?.[1] || "";
+    const levelB = b.match(/(여고|고|여중|중|초|대)$/)?.[1] || "";
+    if (levelA && levelB && levelA !== levelB) {
+      return false;
+    }
+
+    if (a.includes(b) || b.includes(a)) return true;
+    const rootA = a.replace(/(여고|고|여중|중|초|대)$/, "");
+    const rootB = b.replace(/(여고|고|여중|중|초|대)$/, "");
+    if (rootA && rootB && (rootA === rootB || rootA.includes(rootB) || rootB.includes(rootA))) return true;
+    return false;
+  };
+
+  // 학교 최근경기실적 모달 상태 및 핸들러
+  const [selectedSchoolModal, setSelectedSchoolModal] = useState<string | null>(null);
+  const [schoolModalLoading, setSchoolModalLoading] = useState(false);
+  const [schoolMatches, setSchoolMatches] = useState<any[]>([]);
+  const [schoolSearchResults, setSchoolSearchResults] = useState<any[]>([]);
+
+  const handleOpenSchoolRecentMatches = async (schoolName: string) => {
+    if (!schoolName) return;
+    window.history.pushState({ modal: 'schoolRecent' }, '');
+    setSelectedSchoolModal(schoolName);
+    setSchoolModalLoading(true);
+    setSchoolMatches([]);
+    setSchoolSearchResults([]);
+
+    try {
+      const res = await axios.get(`/api/school-matches?name=${encodeURIComponent(schoolName)}`);
+      if (res.data) {
+        setSchoolMatches(res.data.matches || []);
+        setSchoolSearchResults(res.data.searchResults || []);
+      }
+    } catch (e) {
+      console.warn("fetch school matches error:", e);
+      if (data?.matches) {
+        const localMatches = data.matches.filter(m => isSchoolMatch(m.teamA, schoolName) || isSchoolMatch(m.teamB, schoolName));
+        setSchoolMatches(localMatches.map(m => ({
+          tournament: data.tournamentName || "대회",
+          date: m.date,
+          teamA: m.teamA,
+          teamB: m.teamB,
+          score: m.score,
+          detailUrl: m.detailUrl
+        })));
+      }
+    } finally {
+      setSchoolModalLoading(false);
+    }
+  };
+
+  const handleCloseSchoolModal = () => {
+    if (window.history.state?.modal === 'schoolRecent') {
+      window.history.back();
+    } else {
+      setSelectedSchoolModal(null);
+    }
   };
 
   // 용어사전 (사용자 첨부 이미지 용어설명 기준 매핑)
@@ -148,7 +245,15 @@ export default function App() {
     "G/S": { title: "G/S", desc: "골 / 슛시도" },
     "%": { title: "%", desc: "슛성공률" },
     "NO.": { title: "No.", desc: "등번호" },
+    "NO": { title: "No", desc: "등번호" },
     "NAME": { title: "Name", desc: "선수명" },
+    "방어율": { title: "방어율", desc: "골키퍼 방어 성공률 (%)" },
+    "SV": { title: "SV", desc: "골키퍼 세이브 수" },
+    "GKG": { title: "GKG", desc: "골키퍼 득점 (골키퍼 골)" },
+    "GKAS": { title: "GKAS", desc: "골키퍼 어시스트" },
+    "HIGH": { title: "High", desc: "골대 상단 방어율" },
+    "MID": { title: "Mid", desc: "골대 중단 방어율" },
+    "LOW": { title: "Low", desc: "골대 하단 방어율" },
   };
 
   const getTermExplanation = (rawKey: string): { title: string; desc: string } => {
@@ -297,14 +402,616 @@ export default function App() {
     );
   };
 
-  const handleClosePlayer = () => {
-    if (window.history.state?.modal === 'player') {
-      window.history.back();
-    } else {
-      setSelectedPlayer(null);
-      setPlayerPortalInfo(null);
-      setShowPortalTab(false);
-    }
+  // 앱 소스 수정 시 업데이트 감지 배너 및 재실행 버튼
+  const renderUpdateBanner = () => {
+    if (!updateAvailable) return null;
+    return (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[300] bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+        <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />
+        <span className="text-xs font-bold">새로운 앱 업데이트가 있습니다.</span>
+        <button 
+          onClick={handleApplyUpdate} 
+          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-black rounded-xl shadow-md transition-all cursor-pointer"
+        >
+          재실행
+        </button>
+      </div>
+    );
+  };
+
+  // 학교 최근경기실적 모달 렌더링 (경기결과상세에서 상단 학교명 클릭 시 표시)
+  const renderSchoolRecentModal = () => {
+    if (!selectedSchoolModal) return null;
+
+    return (
+      <AnimatePresence>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4"
+        >
+          <motion.div 
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            className="bg-white w-full max-w-2xl rounded-t-[40px] sm:rounded-[40px] h-[88vh] flex flex-col overflow-hidden shadow-2xl"
+          >
+            {/* Header */}
+            <div className="p-6 sm:p-8 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-10"></div>
+                <div className="text-center">
+                  <h2 className="text-2xl font-black text-slate-800">
+                    {formatSchoolName(selectedSchoolModal)} 최근경기실적
+                  </h2>
+                  <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">
+                    School Matches & Stats
+                  </p>
+                </div>
+                <button 
+                  onClick={handleCloseSchoolModal}
+                  className="p-3 bg-gray-50 hover:bg-gray-100 rounded-full text-gray-500 hover:text-slate-800 transition-colors shadow-inner cursor-pointer"
+                  title="닫기"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {schoolModalLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                  <div className="w-9 h-9 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-xs font-bold text-slate-400">{formatSchoolName(selectedSchoolModal)} 최근 경기실적 조회 중...</p>
+                </div>
+              ) : (
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  {/* 최근 공식 경기 실적 리스트 */}
+                  {schoolMatches.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                          최근 공식 경기 실적 ({schoolMatches.length}경기)
+                        </span>
+                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+                          {formatSchoolName(selectedSchoolModal)}
+                        </span>
+                      </div>
+                      {schoolMatches.map((h, i) => (
+                        <div key={i} className="bg-slate-50 p-5 rounded-3xl border border-gray-100 space-y-3 shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black text-indigo-600 px-3 py-1 bg-white rounded-full shadow-2xs border border-indigo-50">{h.tournament}</span>
+                            <span className="text-[10px] font-black text-slate-400">{h.date}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div 
+                              onClick={() => {
+                                if (h.detailUrl) {
+                                  setSelectedSchoolModal(null);
+                                  setActiveDetailTab('compare');
+                                  fetchDetail(h.detailUrl);
+                                }
+                              }}
+                              className={`flex-1 text-sm font-black leading-tight ${isSchoolMatch(h.teamA, selectedSchoolModal) ? 'text-indigo-600' : 'text-slate-800'} ${h.detailUrl ? 'cursor-pointer hover:underline' : ''}`}
+                            >
+                              {formatSchoolName(h.teamA)}
+                            </div>
+                            <div className="mx-4 flex items-center space-x-2">
+                              <span className={`text-lg font-black ${parseInt(h.score?.split(':')[0]) > parseInt(h.score?.split(':')[1]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score?.split(':')[0] || '-'}</span>
+                              <span className="text-xs font-bold text-gray-300">:</span>
+                              <span className={`text-lg font-black ${parseInt(h.score?.split(':')[1]) > parseInt(h.score?.split(':')[0]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score?.split(':')[1] || '-'}</span>
+                            </div>
+                            <div 
+                              onClick={() => {
+                                if (h.detailUrl) {
+                                  setSelectedSchoolModal(null);
+                                  setActiveDetailTab('compare');
+                                  fetchDetail(h.detailUrl);
+                                }
+                              }}
+                              className={`flex-1 text-sm font-black leading-tight text-right ${isSchoolMatch(h.teamB, selectedSchoolModal) ? 'text-indigo-600' : 'text-slate-800'} ${h.detailUrl ? 'cursor-pointer hover:underline' : ''}`}
+                            >
+                              {formatSchoolName(h.teamB)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-12 text-center bg-gray-50 rounded-3xl">
+                      <p className="text-xs font-bold text-gray-400">조회된 최근 공식 경기 실적이 없습니다.</p>
+                    </div>
+                  )}
+
+                  {/* 구글링 최근 실적 검색 결과 */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black">구글링</span>
+                        <span>{formatSchoolName(selectedSchoolModal)} 최근 경기실적 및 뉴스</span>
+                      </span>
+                    </div>
+
+                    {schoolSearchResults && schoolSearchResults.length > 0 ? (
+                      <div className="space-y-2.5">
+                        {schoolSearchResults.map((item: any, sIdx: number) => (
+                          <div key={sIdx} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs space-y-1">
+                            <div className="text-xs font-black text-slate-800 leading-snug">{item.title}</div>
+                            <div className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">{item.snippet}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-2xl text-center text-xs text-gray-400 font-medium">
+                        구글링 최근 경기실적 정보를 불러오는 중입니다.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  };
+
+  // 선수기록 새창 모달 렌더링 (등록이력, 최근경기실적, 역대기록 탭, x 닫기 버튼, 출생년도 표시, 구글링 검색 결과)
+  const renderPlayerModal = () => {
+    if (!selectedPlayer) return null;
+
+    const matchedPortalPlayers = (playerPortalInfo?.players || []).filter((p: any) => 
+      !selectedPlayerTeam || isSchoolMatch(p.team, selectedPlayerTeam)
+    );
+    // 상단 기본정보 카드는 중복 없이 1개만 단일 표시 (최근/해당 소속팀 기준)
+    const primaryPlayer = matchedPortalPlayers[0] || (playerPortalInfo?.players || [])[0];
+
+    const filteredMatches = selectedPlayerTeam 
+      ? playerHistory.filter(h => isSchoolMatch(h.teamA, selectedPlayerTeam) || isSchoolMatch(h.teamB, selectedPlayerTeam))
+      : playerHistory;
+    const matchesToShow = filteredMatches.length > 0 ? filteredMatches : playerHistory;
+
+    return (
+      <AnimatePresence>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4"
+        >
+          <motion.div 
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            className="bg-white w-full max-w-2xl rounded-t-[40px] sm:rounded-[40px] h-[88vh] flex flex-col overflow-hidden shadow-2xl"
+          >
+            {/* Header */}
+            <div className="p-6 sm:p-8 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10"></div>
+                <div className="text-center">
+                  <h2 className="text-2xl font-black text-slate-800">
+                    {selectedPlayer} 선수기록
+                  </h2>
+                  <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">
+                    {selectedPlayerTeam ? formatSchoolName(selectedPlayerTeam) : 'Player Profile & Stats'}
+                  </p>
+                </div>
+                {/* 오른쪽 상단 창닫기 버튼 x 자로 변경 */}
+                <button 
+                  onClick={handleClosePlayer}
+                  className="p-3 bg-gray-50 hover:bg-gray-100 rounded-full text-gray-500 hover:text-slate-800 transition-colors shadow-inner"
+                  title="닫기"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* 선수기록 새창 탭: 등록이력 | 최근경기실적 | 역대기록 */}
+              <div className="flex items-center justify-between gap-2 mt-4 pt-2 border-t border-gray-50">
+                <div className="flex p-1 bg-gray-100 rounded-2xl flex-1 max-w-md">
+                  <button 
+                    onClick={() => setPlayerModalTab('registration')}
+                    className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+                      playerModalTab === 'registration' ? 'bg-white text-slate-900 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    등록이력
+                  </button>
+                  <button 
+                    onClick={() => setPlayerModalTab('recent')}
+                    className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+                      playerModalTab === 'recent' ? 'bg-white text-slate-900 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    최근경기실적
+                  </button>
+                  <button 
+                    onClick={() => setPlayerModalTab('career')}
+                    className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+                      playerModalTab === 'career' ? 'bg-white text-slate-900 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    역대기록
+                  </button>
+                </div>
+                <div className="flex space-x-1.5">
+                  <button 
+                    onClick={handlePlayerSave}
+                    className="px-3 py-1.5 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                  >
+                    저장
+                  </button>
+                  <button 
+                    onClick={() => {
+                      fetchPlayerHistory(selectedPlayer, selectedPlayerTeam, true);
+                    }}
+                    className="px-3 py-1.5 bg-slate-50 text-slate-600 text-[10px] font-black rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
+                  >
+                    재조회
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body Tabs */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* 1. 등록이력 탭: 선수정보와 등록이력 보여주고, 최초등록은 출생년도로 변경, 이름은 등록이력 */}
+              {playerModalTab === 'registration' && (
+                <div className="space-y-5 animate-in fade-in duration-200">
+                  {portalLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16 space-y-3">
+                      <div className="w-9 h-9 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-xs font-bold text-slate-400">선수 등록이력 및 정보를 불러오는 중...</p>
+                    </div>
+                  ) : primaryPlayer ? (
+                    <div className="space-y-4">
+                      {/* 선수 기본 정보 단일 카드 (중복 방지: 상단에 1개만 단일 표시) */}
+                      <div className="bg-white p-5 rounded-3xl border border-indigo-100/80 space-y-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-base font-black text-slate-800">{primaryPlayer.name}</span>
+                            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${primaryPlayer.gender === '남자' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+                              {primaryPlayer.gender}
+                            </span>
+                            <span className="text-[10px] font-black px-2.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100">
+                              {primaryPlayer.sport || '핸드볼'}
+                            </span>
+                          </div>
+                          {/* 요구사항: 선수정보에서 최초등록은 출생년도라고 바꿔주고 */}
+                          <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+                            출생년도 {primaryPlayer.regYear ? `${primaryPlayer.regYear}년` : '-'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-gray-100">
+                          <div className="bg-slate-50 p-2.5 rounded-2xl text-center">
+                            <div className="text-[9px] text-gray-400 font-bold uppercase">소속팀(학교)</div>
+                            <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{formatSchoolName(primaryPlayer.team) || '-'}</div>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-2xl text-center">
+                            <div className="text-[9px] text-gray-400 font-bold uppercase">종별</div>
+                            <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{primaryPlayer.category || '-'}</div>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-2xl text-center">
+                            <div className="text-[9px] text-gray-400 font-bold uppercase">시도</div>
+                            <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{primaryPlayer.sido || '-'}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 등록이력 (요구사항: 등록이력 이름은 경기인 등록이력이 아니고 등록이력이라 해주고) */}
+                      {playerPortalInfo?.detailedHistories && playerPortalInfo.detailedHistories.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                              등록이력
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold">
+                              총 {playerPortalInfo.detailedHistories.length}건
+                            </span>
+                          </div>
+                          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-gray-100">
+                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">등록년도</th>
+                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">소속팀(학교)</th>
+                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">종별</th>
+                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">시도</th>
+                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">구분</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {playerPortalInfo.detailedHistories.map((hist: any, hIdx: number) => (
+                                  <tr key={hIdx} className="hover:bg-slate-50/50">
+                                    <td className="px-3 py-2 font-black text-slate-700 text-center">{hist.year}</td>
+                                    <td className="px-3 py-2 font-bold text-slate-800 text-center">{formatSchoolName(hist.team)}</td>
+                                    <td className="px-3 py-2 text-slate-500 text-center">{hist.category}</td>
+                                    <td className="px-3 py-2 text-slate-400 text-center">{hist.sido}</td>
+                                    <td className="px-3 py-2 text-slate-400 text-center text-[10px]">{hist.regType}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-16 text-center text-xs text-slate-500 font-bold bg-gray-50 rounded-3xl">
+                      대한체육회 포털에 등록된 '{selectedPlayer}' 선수 정보가 없습니다.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 2. 최근경기실적 탭: 대한체육회 스포츠포털 경기실적 테이블 (사용자 첨부 이미지 1과 일치) */}
+              {playerModalTab === 'recent' && (
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  {portalLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16 space-y-3">
+                      <div className="w-9 h-9 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-xs font-bold text-slate-400">대한체육회 포털 최근 경기 실적 조회 중...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* 최근 경기실적 테이블 (스포츠지원포털 경기실적 - 이미지 1과 일치) */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                            최근 경기실적
+                          </span>
+                          {playerPortalInfo?.recentMatchRecords && (
+                            <span className="text-[10px] text-slate-400 font-bold">
+                              총 {playerPortalInfo.recentMatchRecords.length}건
+                            </span>
+                          )}
+                        </div>
+                        <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
+                          <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 font-bold">
+                                <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">대회기간</th>
+                                <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">구분</th>
+                                <th className="border border-gray-200 px-3 py-2 text-left text-[10px]">대회명</th>
+                                <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">장소</th>
+                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">참가팀수</th>
+                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">경기방식</th>
+                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">출전유무</th>
+                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">포지션</th>
+                                <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">종목</th>
+                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">순위</th>
+                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">비고</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 text-slate-700">
+                              {playerPortalInfo?.recentMatchRecords && playerPortalInfo.recentMatchRecords.length > 0 ? (
+                                playerPortalInfo.recentMatchRecords.map((m: any, mIdx: number) => (
+                                  <tr key={mIdx} className="hover:bg-slate-50 transition-colors">
+                                    <td className="border border-gray-200 px-3 py-2 text-[10px] font-medium text-slate-500 text-center">{m.period}</td>
+                                    <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-center">{m.type}</td>
+                                    <td className="border border-gray-200 px-3 py-2 text-xs font-bold text-slate-800 text-left">{m.tournament}</td>
+                                    <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.venue}</td>
+                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.teamCount}</td>
+                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.matchType || '-'}</td>
+                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.played || '-'}</td>
+                                    <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-indigo-600 text-center">{m.position || '-'}</td>
+                                    <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.category}</td>
+                                    <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-emerald-600 text-center">{m.rank || '-'}</td>
+                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-slate-400 text-center">{m.remark || '-'}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan={11} className="py-8 text-center text-xs text-gray-400">
+                                    포털에 등록된 최근 경기실적이 없습니다.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* KHF 최근 경기 상세 기록 */}
+                      {matchesToShow.length > 0 && (
+                        <div className="space-y-4 pt-4 border-t border-gray-100">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                              협회 공식 경기 세부 기록 ({matchesToShow.length}경기)
+                            </span>
+                            {selectedPlayerTeam && (
+                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+                                {formatSchoolName(selectedPlayerTeam)}
+                              </span>
+                            )}
+                          </div>
+                          {matchesToShow.map((h, i) => (
+                            <div key={i} className="bg-slate-50 p-5 rounded-3xl border border-gray-100 space-y-3 shadow-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black text-indigo-600 px-3 py-1 bg-white rounded-full shadow-2xs border border-indigo-50">{h.tournament}</span>
+                                <span className="text-[10px] font-black text-slate-400">{h.date}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <div 
+                                  onClick={() => {
+                                    if (h.detailUrl) {
+                                      setActiveDetailTab('compare');
+                                      fetchDetail(h.detailUrl);
+                                      setSelectedPlayer(null);
+                                    }
+                                  }}
+                                  className="flex-1 text-sm font-black text-slate-800 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+                                >
+                                  {formatSchoolName(h.teamA)}
+                                </div>
+                                <div className="mx-4 flex items-center space-x-2">
+                                  <span className={`text-lg font-black ${parseInt(h.score?.split(':')[0]) > parseInt(h.score?.split(':')[1]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score?.split(':')[0] || '-'}</span>
+                                  <span className="text-xs font-bold text-gray-300">:</span>
+                                  <span className={`text-lg font-black ${parseInt(h.score?.split(':')[1]) > parseInt(h.score?.split(':')[0]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score?.split(':')[1] || '-'}</span>
+                                </div>
+                                <div 
+                                  onClick={() => {
+                                    if (h.detailUrl) {
+                                      setActiveDetailTab('compare');
+                                      fetchDetail(h.detailUrl);
+                                      setSelectedPlayer(null);
+                                    }
+                                  }}
+                                  className="flex-1 text-sm font-black text-slate-800 text-right leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+                                >
+                                  {formatSchoolName(h.teamB)}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-200/60 text-center">
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">G/S</div>
+                                  <div className="text-xs font-black text-slate-800">{h.gs}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">성공률</div>
+                                  <div className="text-xs font-black text-slate-800">{h.rate}%</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">어시스트</div>
+                                  <div className="text-xs font-black text-indigo-600">{h.as}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">스틸</div>
+                                  <div className="text-xs font-black text-indigo-600">{h.st}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3. 역대기록 탭: 대한체육회 스포츠포털 역대 경기실적 테이블 및 통산 기록 (사용자 첨부 이미지 1과 일치) */}
+              {playerModalTab === 'career' && (
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  {/* 통산 요약 통계 */}
+                  {(() => {
+                    const totalMatches = matchesToShow.length;
+                    let totalGoals = 0;
+                    let totalShots = 0;
+                    let totalAs = 0;
+                    let totalSt = 0;
+
+                    matchesToShow.forEach(m => {
+                      if (m.gs && m.gs.includes('/')) {
+                        const parts = m.gs.split('/');
+                        totalGoals += parseInt(parts[0]) || 0;
+                        totalShots += parseInt(parts[1]) || 0;
+                      }
+                      totalAs += parseInt(m.as) || 0;
+                      totalSt += parseInt(m.st) || 0;
+                    });
+
+                    const careerRate = totalShots > 0 ? Math.round((totalGoals / totalShots) * 100) : 0;
+
+                    return (
+                      <div className="bg-slate-900 text-white rounded-3xl p-5 space-y-4 shadow-lg">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <span className="text-xs font-black tracking-wider text-slate-300">
+                            {selectedPlayer} 역대 통산 기록 요약
+                          </span>
+                          <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950 px-2.5 py-0.5 rounded-full">
+                            총 {totalMatches}경기 출전
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div className="bg-slate-800/80 p-3 rounded-2xl">
+                            <div className="text-[9px] text-slate-400 font-bold uppercase">통산 득점</div>
+                            <div className="text-base font-black text-white mt-0.5">{totalGoals}골</div>
+                          </div>
+                          <div className="bg-slate-800/80 p-3 rounded-2xl">
+                            <div className="text-[9px] text-slate-400 font-bold uppercase">슈팅 시도</div>
+                            <div className="text-base font-black text-white mt-0.5">{totalShots}회</div>
+                          </div>
+                          <div className="bg-slate-800/80 p-3 rounded-2xl">
+                            <div className="text-[9px] text-slate-400 font-bold uppercase">성공률</div>
+                            <div className="text-base font-black text-emerald-400 mt-0.5">{careerRate}%</div>
+                          </div>
+                          <div className="bg-slate-800/80 p-3 rounded-2xl">
+                            <div className="text-[9px] text-slate-400 font-bold uppercase">어시스트</div>
+                            <div className="text-base font-black text-indigo-400 mt-0.5">{totalAs}회</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 역대 경기실적 테이블 (스포츠지원포털 경기실적 - 이미지 1과 일치) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                        역대 대회 및 경기 실적
+                      </span>
+                      {playerPortalInfo?.recentMatchRecords && (
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          총 {playerPortalInfo.recentMatchRecords.length}건
+                        </span>
+                      )}
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
+                      <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 font-bold">
+                            <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">대회기간</th>
+                            <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">구분</th>
+                            <th className="border border-gray-200 px-3 py-2 text-left text-[10px]">대회명</th>
+                            <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">장소</th>
+                            <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">참가팀수</th>
+                            <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">경기방식</th>
+                            <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">출전유무</th>
+                            <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">포지션</th>
+                            <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">종목</th>
+                            <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">순위</th>
+                            <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">비고</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 text-slate-700">
+                          {playerPortalInfo?.recentMatchRecords && playerPortalInfo.recentMatchRecords.length > 0 ? (
+                            playerPortalInfo.recentMatchRecords.map((m: any, mIdx: number) => (
+                              <tr key={mIdx} className="hover:bg-slate-50 transition-colors">
+                                <td className="border border-gray-200 px-3 py-2 text-[10px] font-medium text-slate-500 text-center">{m.period}</td>
+                                <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-center">{m.type}</td>
+                                <td className="border border-gray-200 px-3 py-2 text-xs font-bold text-slate-800 text-left">{m.tournament}</td>
+                                <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.venue}</td>
+                                <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.teamCount}</td>
+                                <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.matchType || '-'}</td>
+                                <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.played || '-'}</td>
+                                <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-indigo-600 text-center">{m.position || '-'}</td>
+                                <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.category}</td>
+                                <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-emerald-600 text-center">{m.rank || '-'}</td>
+                                <td className="border border-gray-200 px-2 py-2 text-[10px] text-slate-400 text-center">{m.remark || '-'}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={11} className="py-8 text-center text-xs text-gray-400">
+                                포털에 등록된 역대 경기실적이 없습니다.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
   };
 
   const handleCloseDetail = () => {
@@ -327,14 +1034,16 @@ export default function App() {
       if (!state || !state.modal) {
         // 메인 화면으로 복귀
         setSelectedPlayer(null);
+        setSelectedSchoolModal(null);
         setPlayerPortalInfo(null);
         setShowPortalTab(false);
         setMatchDetail(null);
         setDetailLoading(false);
         setActiveDetailTab('compare');
       } else if (state.modal === 'matchDetail') {
-        // 경기 상세 화면 유지 (선수 기록 모달만 닫기)
+        // 경기 상세 화면 유지 (선수 기록 모달 및 학교 모달만 닫기)
         setSelectedPlayer(null);
+        setSelectedSchoolModal(null);
         setPlayerPortalInfo(null);
         setShowPortalTab(false);
       }
@@ -544,6 +1253,10 @@ export default function App() {
     setSelectedPlayer(playerName);
     setSelectedPlayerTeam(teamName);
     
+    // 포털 정보 및 구글링 실적 정보도 함께 로드
+    fetchPlayerPortalInfo(playerName, teamName, isRefetch);
+    fetchPlayerExtraRecords(playerName, teamName, isRefetch);
+    
     const savedKey = `player_saved_v18_${playerName}_${teamName || 'all'}`;
     const cacheKey = `player_history_v18_${playerName}_${teamName || 'all'}`;
 
@@ -581,32 +1294,6 @@ export default function App() {
       const savedKey = `player_saved_v18_${selectedPlayer}_${selectedPlayerTeam || 'all'}`;
       localStorage.setItem(savedKey, JSON.stringify(playerHistory));
     }
-  };
-
-  // 학교명 정규화 및 일치 여부 확인 함수 (동일이름 선수 구분)
-  const normalizeSchool = (str?: string): string => {
-    if (!str) return "";
-    return str
-      .replace(/\s+/g, "")
-      .replace(/여자고등학교/g, "여고")
-      .replace(/고등학교/g, "고")
-      .replace(/여자중학교/g, "여중")
-      .replace(/중학교/g, "중")
-      .replace(/초등학교/g, "초")
-      .replace(/대학교/g, "대")
-      .replace(/학교/g, "");
-  };
-
-  const isSchoolMatch = (schoolA?: string, schoolB?: string): boolean => {
-    if (!schoolA || !schoolB) return false;
-    const a = normalizeSchool(schoolA);
-    const b = normalizeSchool(schoolB);
-    if (!a || !b) return false;
-    if (a.includes(b) || b.includes(a)) return true;
-    const rootA = a.replace(/(고|여고|중|여중|초|대)$/, "");
-    const rootB = b.replace(/(고|여고|중|여중|초|대)$/, "");
-    if (rootA && rootB && (rootA.includes(rootB) || rootB.includes(rootA))) return true;
-    return false;
   };
 
   // 대한체육회 스포츠지원포털 선수통합검색 (종목: 핸드볼, 시도전체, 성별전체, 선수명, 학교정보)
@@ -701,6 +1388,71 @@ export default function App() {
     }
   };
 
+  // 선수 구글링 및 역대/최근 경기 실적 정보 가져오기
+  const fetchPlayerExtraRecords = async (playerName: string, teamName?: string, isRefetch = false) => {
+    const cacheKey = `player_extra_v1_${playerName}_${teamName || 'all'}`;
+    if (!isRefetch) {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          setPlayerExtraRecords(JSON.parse(cached));
+          return;
+        } catch (e) {
+          // ignore cache parse error
+        }
+      }
+    }
+
+    setExtraRecordsLoading(true);
+    try {
+      const url = `/api/player-extra-records?name=${encodeURIComponent(playerName)}${teamName ? `&team=${encodeURIComponent(teamName)}` : ''}`;
+      const res = await axios.get(url);
+      if (res.data) {
+        setPlayerExtraRecords(res.data);
+        localStorage.setItem(cacheKey, JSON.stringify(res.data));
+      }
+    } catch (err) {
+      console.warn("fetchPlayerExtraRecords error:", err);
+    } finally {
+      setExtraRecordsLoading(false);
+    }
+  };
+
+  // 소스 수정 후 웹앱 실행 시 업데이트 알림 및 재실행 감지
+  useEffect(() => {
+    const checkAppVersion = async () => {
+      try {
+        const res = await axios.get("/api/app-version", { timeout: 4000 });
+        if (res.data && res.data.version) {
+          const currentVersion = res.data.version;
+          const storedVersion = localStorage.getItem("handball_app_current_version");
+          if (storedVersion && storedVersion !== currentVersion) {
+            setUpdateAvailable(true);
+          } else {
+            localStorage.setItem("handball_app_current_version", currentVersion);
+          }
+        }
+      } catch (e) {
+        // ignore version check failure
+      }
+    };
+
+    checkAppVersion();
+    const interval = setInterval(checkAppVersion, 30000); // 30초마다 새 업데이트 확인
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleApplyUpdate = () => {
+    // 최신 버전 저장 후 페이지 새로고침(재실행)
+    axios.get("/api/app-version").then((res) => {
+      if (res.data?.version) {
+        localStorage.setItem("handball_app_current_version", res.data.version);
+      }
+    }).finally(() => {
+      window.location.reload();
+    });
+  };
+
   useEffect(() => {
     fetchData(year, month);
   }, [year, month]);
@@ -720,6 +1472,7 @@ export default function App() {
   if (matchDetail || detailLoading) {
     return (
       <div className="min-h-screen bg-white font-sans text-slate-900 pb-20">
+        {renderUpdateBanner()}
         {/* Detail Page Header */}
         <div className="bg-white px-6 pt-8 pb-4 border-b border-gray-100 sticky top-0 z-50 flex items-center">
           <button 
@@ -753,13 +1506,17 @@ export default function App() {
               {/* Professional Scoreboard */}
               <div className="flex items-center justify-between py-6 px-4 bg-white rounded-3xl border border-gray-100 shadow-lg shadow-slate-100/60">
                 {/* Home */}
-                <div className="flex flex-col items-center flex-1">
+                <div 
+                  onClick={() => handleOpenSchoolRecentMatches(matchDetail.homeTeam)}
+                  className="flex flex-col items-center flex-1 cursor-pointer group transition-transform active:scale-95"
+                  title="학교 최근경기실적 보기"
+                >
                   <div className={`text-4xl sm:text-5xl font-black mb-2 transition-all duration-300 ${
                     (parseInt(matchDetail.totalScore.split(':')[0]) || 0) > (parseInt(matchDetail.totalScore.split(':')[1]) || 0) 
                       ? 'text-red-600 scale-105' : 'text-slate-800'}`}>
                     {matchDetail.totalScore.split(':')[0] || '0'}
                   </div>
-                  <span className="text-sm sm:text-base font-black text-slate-800 text-center break-keep leading-tight px-1">
+                  <span className="text-sm sm:text-base font-black text-slate-800 group-hover:text-indigo-600 group-hover:underline text-center break-keep leading-tight px-1">
                     {formatSchoolName(matchDetail.homeTeam)}
                   </span>
                 </div>
@@ -788,13 +1545,17 @@ export default function App() {
                 </div>
 
                 {/* Away */}
-                <div className="flex flex-col items-center flex-1">
+                <div 
+                  onClick={() => handleOpenSchoolRecentMatches(matchDetail.awayTeam)}
+                  className="flex flex-col items-center flex-1 cursor-pointer group transition-transform active:scale-95"
+                  title="학교 최근경기실적 보기"
+                >
                   <div className={`text-4xl sm:text-5xl font-black mb-2 transition-all duration-300 ${
                     (parseInt(matchDetail.totalScore.split(':')[1]) || 0) > (parseInt(matchDetail.totalScore.split(':')[0]) || 0) 
                       ? 'text-red-600 scale-105' : 'text-slate-800'}`}>
                     {matchDetail.totalScore.split(':')[1] || '0'}
                   </div>
-                  <span className="text-sm sm:text-base font-black text-slate-800 text-center break-keep leading-tight px-1">
+                  <span className="text-sm sm:text-base font-black text-slate-800 group-hover:text-indigo-600 group-hover:underline text-center break-keep leading-tight px-1">
                     {formatSchoolName(matchDetail.awayTeam)}
                   </span>
                 </div>
@@ -893,66 +1654,63 @@ export default function App() {
                       {[
                         { team: 'home', name: matchDetail.homeTeam, players: matchDetail.playerRecords.home },
                         { team: 'away', name: matchDetail.awayTeam, players: matchDetail.playerRecords.away }
-                      ].map((t, idx) => (
-                        <div key={idx} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-xl shadow-slate-100">
-                          <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
-                            <span className="text-sm font-black text-white">{formatSchoolName(t.name)}</span>
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Player Roster</span>
-                          </div>
-                          <div className="overflow-x-auto scrollbar-hide">
-                            <table className="w-full text-center border-collapse whitespace-nowrap min-w-max">
-                              <thead>
-                                <tr className="bg-slate-50/80 border-b border-gray-100">
-                                  <th onClick={(e) => handleOpenTerm('No.', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 sticky left-0 bg-slate-50 z-20 cursor-pointer hover:text-indigo-600 uppercase min-w-[28px]">No.</th>
-                                  <th onClick={(e) => handleOpenTerm('Name', e)} className="px-1.5 py-2 text-[10px] font-black text-gray-400 sticky left-[28px] bg-slate-50 z-20 border-r border-gray-100 cursor-pointer hover:text-indigo-600 uppercase text-left min-w-[48px]">Name</th>
-                                  <th onClick={(e) => handleOpenTerm('G/S', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">G/S</th>
-                                  <th onClick={(e) => handleOpenTerm('%', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">%</th>
-                                  <th onClick={(e) => handleOpenTerm('6M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">6M</th>
-                                  <th onClick={(e) => handleOpenTerm('Wing', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Wing</th>
-                                  <th onClick={(e) => handleOpenTerm('9M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">9M</th>
-                                  <th onClick={(e) => handleOpenTerm('7M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">7M</th>
-                                  <th onClick={(e) => handleOpenTerm('FB', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">FB</th>
-                                  <th onClick={(e) => handleOpenTerm('BT', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BT</th>
-                                  <th onClick={(e) => handleOpenTerm('AS', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">AS</th>
-                                  <th onClick={(e) => handleOpenTerm('TF', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">TF</th>
-                                  <th onClick={(e) => handleOpenTerm('BD', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BD</th>
-                                  <th onClick={(e) => handleOpenTerm('BS', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BS</th>
-                                  <th onClick={(e) => handleOpenTerm('ST', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">ST</th>
-                                  <th onClick={(e) => handleOpenTerm('YC', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">YC</th>
-                                  <th onClick={(e) => handleOpenTerm("2'", e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">2'</th>
-                                  <th onClick={(e) => handleOpenTerm('RC', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">RC</th>
-                                  <th onClick={(e) => handleOpenTerm('Rep', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Rep</th>
-                                  <th onClick={(e) => handleOpenTerm('Time', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Time</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {t.players.map((p, i) => (
-                                  <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-1 py-2 text-xs font-black text-slate-400 sticky left-0 bg-white group-hover:bg-slate-50 z-10 text-center">{p.no}</td>
-                                    <td className="px-1.5 py-2 text-xs font-black text-indigo-600 sticky left-[28px] bg-white group-hover:bg-slate-50 z-10 border-r border-gray-100 whitespace-nowrap text-left">
-                                      <button 
-                                        onClick={() => fetchPlayerHistory(p.name, t.name)}
-                                        className="hover:underline text-left font-bold"
-                                      >
-                                        {p.name}
-                                      </button>
-                                    </td>
-                                    {p.isGoalie ? (
-                                      <>
-                                        <td className="px-1 py-2 text-xs font-black text-slate-800 text-center">{p.gs}</td>
-                                        <td className="px-1 py-2 text-[11px] font-bold text-slate-400 text-center">{p.rate}%</td>
-                                        <td colSpan={6} className="bg-gray-50/30"></td>
-                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.as}</td>
-                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.tf}</td>
-                                        <td className="px-1 py-2 text-xs font-black text-slate-400 text-center"></td>
-                                        <td className="px-1 py-2 text-xs font-black text-slate-400 text-center"></td>
-                                        <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.st}</td>
-                                        <td colSpan={3}></td>
-                                        <td className="px-1 py-2 text-[10px] font-bold text-gray-400 text-center"></td>
-                                        <td className="px-1 py-2 text-[10px] font-bold text-slate-500 text-center whitespace-nowrap">{p.playTime}</td>
-                                      </>
-                                    ) : (
-                                      <>
+                      ].map((t, idx) => {
+                        const fieldPlayers = t.players.filter(p => !p.isGoalie);
+                        const goalies = t.players.filter(p => p.isGoalie);
+
+                        return (
+                          <div key={idx} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-xl shadow-slate-100 space-y-4 pb-4">
+                            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
+                              <span className="text-sm font-black text-white">{formatSchoolName(t.name)}</span>
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Player Roster</span>
+                            </div>
+
+                            {/* 필드 플레이어 표 */}
+                            <div>
+                              <div className="px-5 py-1.5 flex items-center justify-between">
+                                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                  <span>필드 플레이어</span>
+                                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{fieldPlayers.length}명</span>
+                                </span>
+                              </div>
+                              <div className="overflow-x-auto scrollbar-hide">
+                                <table className="w-full text-center border-collapse whitespace-nowrap min-w-max">
+                                  <thead>
+                                    <tr className="bg-slate-50/80 border-b border-gray-100">
+                                      <th onClick={(e) => handleOpenTerm('No.', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 sticky left-0 bg-slate-50 z-20 cursor-pointer hover:text-indigo-600 uppercase min-w-[28px]">No.</th>
+                                      <th onClick={(e) => handleOpenTerm('Name', e)} className="px-1.5 py-2 text-[10px] font-black text-gray-400 sticky left-[28px] bg-slate-50 z-20 border-r border-gray-100 cursor-pointer hover:text-indigo-600 uppercase text-left min-w-[48px]">Name</th>
+                                      <th onClick={(e) => handleOpenTerm('G/S', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">G/S</th>
+                                      <th onClick={(e) => handleOpenTerm('%', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">%</th>
+                                      <th onClick={(e) => handleOpenTerm('6M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">6M</th>
+                                      <th onClick={(e) => handleOpenTerm('Wing', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Wing</th>
+                                      <th onClick={(e) => handleOpenTerm('9M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">9M</th>
+                                      <th onClick={(e) => handleOpenTerm('7M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">7M</th>
+                                      <th onClick={(e) => handleOpenTerm('FB', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">FB</th>
+                                      <th onClick={(e) => handleOpenTerm('BT', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BT</th>
+                                      <th onClick={(e) => handleOpenTerm('AS', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">AS</th>
+                                      <th onClick={(e) => handleOpenTerm('TF', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">TF</th>
+                                      <th onClick={(e) => handleOpenTerm('BD', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BD</th>
+                                      <th onClick={(e) => handleOpenTerm('BS', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BS</th>
+                                      <th onClick={(e) => handleOpenTerm('ST', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">ST</th>
+                                      <th onClick={(e) => handleOpenTerm('YC', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">YC</th>
+                                      <th onClick={(e) => handleOpenTerm("2'", e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">2'</th>
+                                      <th onClick={(e) => handleOpenTerm('RC', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">RC</th>
+                                      <th onClick={(e) => handleOpenTerm('Rep', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Rep</th>
+                                      <th onClick={(e) => handleOpenTerm('Time', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Time</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-50">
+                                    {fieldPlayers.map((p, i) => (
+                                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-1 py-2 text-xs font-black text-slate-400 sticky left-0 bg-white group-hover:bg-slate-50 z-10 text-center">{p.no}</td>
+                                        <td className="px-1.5 py-2 text-xs font-black text-indigo-600 sticky left-[28px] bg-white group-hover:bg-slate-50 z-10 border-r border-gray-100 whitespace-nowrap text-left">
+                                          <button 
+                                            onClick={() => fetchPlayerHistory(p.name, t.name)}
+                                            className="hover:underline text-left font-bold"
+                                          >
+                                            {p.name}
+                                          </button>
+                                        </td>
                                         <td className="px-1 py-2 text-xs font-black text-slate-800 text-center">{p.gs}</td>
                                         <td className="px-1 py-2 text-[11px] font-bold text-slate-400 text-center">{p.rate}%</td>
                                         <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.m6}</td>
@@ -977,15 +1735,84 @@ export default function App() {
                                         </td>
                                         <td className="px-1 py-2 text-[10px] font-bold text-gray-400 text-center">{p.report}</td>
                                         <td className="px-1 py-2 text-[10px] font-bold text-slate-500 text-center whitespace-nowrap">{p.playTime}</td>
-                                      </>
-                                    )}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* 골키퍼 (GK) - 사용자 첨부 이미지 2와 동일한 2단 헤더 및 15개 컬럼 표 */}
+                            {goalies.length > 0 && (
+                              <div className="pt-3 border-t border-gray-100">
+                                <div className="px-5 py-2 flex items-center justify-between">
+                                  <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                    <span>골키퍼</span>
+                                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{goalies.length}명</span>
+                                  </span>
+                                </div>
+                                <div className="overflow-x-auto scrollbar-hide px-3 pb-2">
+                                  <table className="w-full text-center border-collapse whitespace-nowrap min-w-max border border-gray-200">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-gray-200 text-slate-700">
+                                        <th colSpan={2} className="border border-gray-200 py-1.5 text-xs font-bold">Player</th>
+                                        <th colSpan={4} className="border border-gray-200 py-1.5 text-xs font-bold">기본기록</th>
+                                        <th colSpan={6} className="border border-gray-200 py-1.5 text-xs font-bold">유형별 방어율</th>
+                                        <th colSpan={3} className="border border-gray-200 py-1.5 text-xs font-bold">위치별 방어율</th>
+                                      </tr>
+                                      <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 text-xs font-bold">
+                                        <th onClick={(e) => handleOpenTerm('No', e)} className="border border-gray-200 px-2 py-1.5 cursor-pointer hover:text-indigo-600 min-w-[36px]">No</th>
+                                        <th onClick={(e) => handleOpenTerm('Name', e)} className="border border-gray-200 px-3 py-1.5 cursor-pointer hover:text-indigo-600 min-w-[60px]">Name</th>
+                                        <th onClick={(e) => handleOpenTerm('방어율', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">방어율</th>
+                                        <th onClick={(e) => handleOpenTerm('SV', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">SV</th>
+                                        <th onClick={(e) => handleOpenTerm('GKG', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">GKG</th>
+                                        <th onClick={(e) => handleOpenTerm('GKAS', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">GKAS</th>
+                                        <th onClick={(e) => handleOpenTerm('Wing', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">Wing</th>
+                                        <th onClick={(e) => handleOpenTerm('6m', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">6m</th>
+                                        <th onClick={(e) => handleOpenTerm('9m', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">9m</th>
+                                        <th onClick={(e) => handleOpenTerm('7m', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">7m</th>
+                                        <th onClick={(e) => handleOpenTerm('FB', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">FB</th>
+                                        <th onClick={(e) => handleOpenTerm('BT', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">BT</th>
+                                        <th onClick={(e) => handleOpenTerm('High', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">High</th>
+                                        <th onClick={(e) => handleOpenTerm('Mid', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">Mid</th>
+                                        <th onClick={(e) => handleOpenTerm('Low', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">Low</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                      {goalies.map((p, i) => (
+                                        <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                          <td className="border border-gray-200 px-2 py-2 text-xs font-medium text-slate-700">{p.no}</td>
+                                          <td className="border border-gray-200 px-3 py-2 text-xs font-bold text-indigo-600">
+                                            <button 
+                                              onClick={() => fetchPlayerHistory(p.name, t.name)}
+                                              className="hover:underline font-bold text-indigo-600"
+                                            >
+                                              {p.name}
+                                            </button>
+                                          </td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.rate ? (p.rate.includes('%') ? p.rate : `${p.rate}%`) : '0%'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.sv || '0'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.gkg || '0'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.gkas || '0'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.wing ? (p.wing.includes('%') ? p.wing : `${p.wing}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.m6 ? (p.m6.includes('%') ? p.m6 : `${p.m6}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.m9 ? (p.m9.includes('%') ? p.m9 : `${p.m9}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.m7 ? (p.m7.includes('%') ? p.m7 : `${p.m7}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.fb ? (p.fb.includes('%') ? p.fb : `${p.fb}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.bt ? (p.bt.includes('%') ? p.bt : `${p.bt}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.high ? (p.high.includes('%') ? p.high : `${p.high}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.mid ? (p.mid.includes('%') ? p.mid : `${p.mid}%`) : '-'}</td>
+                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.low ? (p.low.includes('%') ? p.low : `${p.low}%`) : '-'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="py-20 text-center bg-gray-50 rounded-3xl">
@@ -998,288 +1825,10 @@ export default function App() {
           )}
         </div>
 
-        {/* Floating Player Modal (Keep for History) */}
-        <AnimatePresence>
-          {selectedPlayer && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4"
-            >
-              <motion.div 
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                className="bg-white w-full max-w-2xl rounded-t-[40px] sm:rounded-[40px] h-[85vh] flex flex-col overflow-hidden shadow-2xl"
-              >
-                <div className="p-8 border-b border-gray-50">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-10"></div>
-                    <div className="text-center">
-                      <h2 className="text-2xl font-black text-slate-800">
-                        {selectedPlayer} {showPortalTab ? '선수 정보' : '선수 기록'}
-                      </h2>
-                      <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">
-                        {showPortalTab ? '대한체육회 스포츠지원포털 통합검색' : 'Season Match History'}
-                      </p>
-                    </div>
-                    <button 
-                      onClick={handleClosePlayer}
-                      className="p-3 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 transition-colors shadow-inner"
-                    >
-                      <ChevronDown className="w-6 h-6" />
-                    </button>
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <button 
-                      onClick={handlePlayerSave}
-                      className="px-4 py-1.5 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors"
-                    >
-                      저장
-                    </button>
-                    <button 
-                      onClick={() => {
-                        fetchPlayerHistory(selectedPlayer!, selectedPlayerTeam, true);
-                        if (showPortalTab) {
-                          fetchPlayerPortalInfo(selectedPlayer!, selectedPlayerTeam, true);
-                        }
-                      }}
-                      className="px-4 py-1.5 bg-slate-50 text-slate-600 text-[10px] font-black rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
-                    >
-                      재조회
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (showPortalTab) {
-                          setShowPortalTab(false);
-                        } else {
-                          fetchPlayerPortalInfo(selectedPlayer!, selectedPlayerTeam);
-                        }
-                      }}
-                      className={`px-4 py-1.5 ${showPortalTab ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200'} text-[10px] font-black rounded-full border hover:bg-indigo-50 hover:text-indigo-600 transition-colors`}
-                    >
-                      선수정보
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {/* 선수정보 클릭 시 선수이름 밑에 스크롤 되면서 보이는 선수상세정보 */}
-                  {showPortalTab && (
-                    <div className="bg-indigo-50/40 rounded-3xl p-5 border border-indigo-100/80 shadow-xs space-y-3 animate-in fade-in duration-300">
-                      <div className="flex items-center justify-between pb-2 border-b border-indigo-100/60">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs font-black text-indigo-950">대한체육회 선수 상세정보</span>
-                          {selectedPlayerTeam && (
-                            <span className="text-[10px] font-bold px-2.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
-                              {selectedPlayerTeam} 일치
-                            </span>
-                          )}
-                        </div>
-                        <a 
-                          href="https://g1.sports.or.kr/stat/playerSearch.do?gubun=P"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2.5 py-1 bg-white text-indigo-600 text-[10px] font-black rounded-xl border border-indigo-200 shadow-sm hover:bg-indigo-50 flex items-center space-x-1"
-                        >
-                          <span>스포츠지원포털</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-
-                      {/* 선수상세정보 내부 스크롤 영역 */}
-                      <div className="max-h-64 sm:max-h-72 overflow-y-auto space-y-3 pr-1">
-                        {portalLoading ? (
-                          <div className="flex flex-col items-center justify-center py-10 space-y-3">
-                            <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                            <p className="text-xs font-bold text-slate-400">대한체육회 포털 선수 정보 조회 중...</p>
-                          </div>
-                        ) : (() => {
-                          // 동일이름이 있으면 학교정보(selectedPlayerTeam)와 일치하는 선수만 필터링
-                          const matchedPortalPlayers = (playerPortalInfo?.players || []).filter((p: any) => 
-                            !selectedPlayerTeam || isSchoolMatch(p.team, selectedPlayerTeam)
-                          );
-                          const displayPlayers = matchedPortalPlayers.length > 0 ? matchedPortalPlayers : (playerPortalInfo?.players || []);
-
-                          return displayPlayers.length > 0 ? (
-                            <div className="space-y-4">
-                              {/* 검색된 선수 카드 */}
-                              {displayPlayers.map((p: any, idx: number) => (
-                                <div key={idx} className="bg-white p-4 rounded-2xl border border-indigo-100/70 space-y-3 shadow-xs">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-2">
-                                      <span className="text-sm font-black text-slate-800">{p.name}</span>
-                                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${p.gender === '남자' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
-                                        {p.gender}
-                                      </span>
-                                      <span className="text-[9px] font-black px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100">
-                                        {p.sport || '핸드볼'}
-                                      </span>
-                                    </div>
-                                    <span className="text-[10px] font-bold text-slate-400">
-                                      최초등록 {p.regYear}년
-                                    </span>
-                                  </div>
-
-                                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-100">
-                                    <div className="bg-slate-50 p-2.5 rounded-xl text-center">
-                                      <div className="text-[9px] text-gray-400 font-bold uppercase">소속팀(학교)</div>
-                                      <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{p.team || '-'}</div>
-                                    </div>
-                                    <div className="bg-slate-50 p-2.5 rounded-xl text-center">
-                                      <div className="text-[9px] text-gray-400 font-bold uppercase">종별</div>
-                                      <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{p.category || '-'}</div>
-                                    </div>
-                                    <div className="bg-slate-50 p-2.5 rounded-xl text-center">
-                                      <div className="text-[9px] text-gray-400 font-bold uppercase">시도</div>
-                                      <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{p.sido || '-'}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-
-                              {/* 경기인 등록 이력 (상세) */}
-                              {playerPortalInfo?.detailedHistories && playerPortalInfo.detailedHistories.length > 0 && (
-                                <div className="space-y-2 pt-1">
-                                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">
-                                    경기인 등록 이력
-                                  </div>
-                                  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
-                                    <table className="w-full text-left border-collapse text-xs">
-                                      <thead>
-                                        <tr className="bg-slate-50 border-b border-gray-100">
-                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">등록년도</th>
-                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">소속팀(학교)</th>
-                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">종별</th>
-                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">시도</th>
-                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">구분</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-gray-50">
-                                        {playerPortalInfo.detailedHistories.map((hist: any, hIdx: number) => (
-                                          <tr key={hIdx} className="hover:bg-slate-50/50">
-                                            <td className="px-3 py-2 font-black text-slate-700 text-center">{hist.year}</td>
-                                            <td className="px-3 py-2 font-bold text-slate-800 text-center">{hist.team}</td>
-                                            <td className="px-3 py-2 text-slate-500 text-center">{hist.category}</td>
-                                            <td className="px-3 py-2 text-slate-400 text-center">{hist.sido}</td>
-                                            <td className="px-3 py-2 text-slate-400 text-center text-[10px]">{hist.regType}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="py-6 text-center text-xs text-slate-500 font-bold">
-                              대한체육회 포털에 등록된 '{selectedPlayer}' 선수 정보가 없습니다.
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 선수 경기 기록 (동일이름 구분: 학교정보와 일치하는 경기만 표시) */}
-                  {playerLoading ? (
-                    <div className="flex flex-col items-center justify-center py-24 space-y-4">
-                      <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                      <p className="text-sm font-black text-slate-300 uppercase tracking-widest">Fetching season data...</p>
-                    </div>
-                  ) : (() => {
-                    const filteredMatches = selectedPlayerTeam 
-                      ? playerHistory.filter(h => isSchoolMatch(h.teamA, selectedPlayerTeam) || isSchoolMatch(h.teamB, selectedPlayerTeam))
-                      : playerHistory;
-                    const matchesToShow = filteredMatches.length > 0 ? filteredMatches : playerHistory;
-
-                    return matchesToShow.length > 0 ? (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between px-1">
-                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                            시즌 경기 기록 ({matchesToShow.length}경기)
-                          </span>
-                          {selectedPlayerTeam && (
-                            <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-full">
-                              {selectedPlayerTeam}
-                            </span>
-                          )}
-                        </div>
-                        {matchesToShow.map((h, i) => (
-                          <div key={i} className="bg-slate-50 p-6 rounded-[32px] border border-gray-100 space-y-4 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black text-indigo-600 px-3 py-1 bg-white rounded-full shadow-sm border border-indigo-50 uppercase">{h.tournament}</span>
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{h.date}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div 
-                                onClick={() => {
-                                  if (h.detailUrl) {
-                                    setActiveDetailTab('compare');
-                                    fetchDetail(h.detailUrl);
-                                    setSelectedPlayer(null);
-                                  }
-                                }}
-                                className="flex-1 text-sm font-black text-slate-800 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
-                              >
-                                {formatSchoolName(h.teamA)}
-                              </div>
-                              <div className="mx-6 flex items-center space-x-3">
-                                <span className={`text-xl font-black ${parseInt(h.score.split(':')[0]) > parseInt(h.score.split(':')[1]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score.split(':')[0]}</span>
-                                <span className="text-sm font-black text-gray-200">:</span>
-                                <span className={`text-xl font-black ${parseInt(h.score.split(':')[1]) > parseInt(h.score.split(':')[0]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score.split(':')[1]}</span>
-                              </div>
-                              <div 
-                                onClick={() => {
-                                  if (h.detailUrl) {
-                                    setActiveDetailTab('compare');
-                                    fetchDetail(h.detailUrl);
-                                    setSelectedPlayer(null);
-                                  }
-                                }}
-                                className="flex-1 text-sm font-black text-slate-800 text-right leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
-                              >
-                                {formatSchoolName(h.teamB)}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-4 gap-4 pt-4 border-t border-gray-100/50">
-                              <div className="text-center">
-                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">G/S</div>
-                                <div className="text-sm font-black text-slate-800">{h.gs}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">%</div>
-                                <div className="text-sm font-black text-slate-800">{h.rate}%</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">AS</div>
-                                <div className="text-sm font-black text-indigo-600">{h.as}</div>
-                              </div>
-                              <div className="text-center">
-                                <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-1">ST</div>
-                                <div className="text-sm font-black text-indigo-600">{h.st}</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="py-24 text-center">
-                        <div className="w-16 h-16 bg-slate-50 rounded-full mx-auto flex items-center justify-center text-slate-200 mb-4">
-                          <ChevronDown className="w-8 h-8 opacity-20" />
-                        </div>
-                        <p className="text-sm font-black text-slate-300 uppercase tracking-widest">
-                          {selectedPlayerTeam ? `${selectedPlayerTeam} 경기 기록이 없습니다.` : 'No matching records found.'}
-                        </p>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Floating Player Modal */}
+        {renderPlayerModal()}
+        {/* School Recent Matches Modal (상단 학교명 클릭 시 표시) */}
+        {renderSchoolRecentModal()}
         {/* Term Explanation Popup (단일 용어 전용 팝업 - 블러 제거, 배경 보임, 글자 위쪽 팝업) */}
         {renderTermExplanationPopup()}
       </div>
@@ -1288,6 +1837,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F3F4F6] font-sans text-slate-900 pb-20">
+      {renderUpdateBanner()}
       {/* Top Header */}
       <div className="bg-white px-6 pt-8 pb-4 border-b border-gray-200 sticky top-0 z-50">
         <div className="flex justify-between items-center mb-6">
@@ -1592,126 +2142,9 @@ export default function App() {
       )}
 
       {/* Player History Modal */}
-      <AnimatePresence>
-        {selectedPlayer && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
-          >
-            <motion.div 
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl h-[85vh] flex flex-col overflow-hidden"
-            >
-              <div className="p-8 border-b border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-10"></div>
-                  <div className="text-center">
-                    <h2 className="text-2xl font-black text-slate-800">{selectedPlayer} 선수 기록</h2>
-                    <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">Season Match History</p>
-                  </div>
-                  <button 
-                    onClick={handleClosePlayer}
-                    className="p-3 bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 transition-colors shadow-inner"
-                  >
-                    <ChevronDown className="w-6 h-6" />
-                  </button>
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <button 
-                    onClick={handlePlayerSave}
-                    className="px-4 py-1.5 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-full border border-indigo-100 hover:bg-indigo-100 transition-colors"
-                  >
-                    저장
-                  </button>
-                  <button 
-                    onClick={() => fetchPlayerHistory(selectedPlayer!, selectedPlayerTeam, true)}
-                    className="px-4 py-1.5 bg-slate-50 text-slate-600 text-[10px] font-black rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
-                  >
-                    재조회
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {playerLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                    <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-sm font-bold text-slate-400">선수 기록을 불러오고 있습니다...</p>
-                  </div>
-                ) : playerHistory.length > 0 ? (
-                  <div className="space-y-3">
-                    {playerHistory.map((h, i) => (
-                      <div key={i} className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded">{h.tournament}</span>
-                          <span className="text-[10px] font-medium text-gray-400">{h.date}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div 
-                            onClick={() => {
-                              if (h.detailUrl) {
-                                setActiveDetailTab('compare');
-                                fetchDetail(h.detailUrl);
-                                setSelectedPlayer(null);
-                              }
-                            }}
-                            className="flex-1 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 hover:underline"
-                          >
-                            {formatSchoolName(h.teamA)}
-                          </div>
-                          <div className="mx-4 flex items-center space-x-2">
-                            <span className={`text-sm font-black ${h.score.split(':')[0] > h.score.split(':')[1] ? 'text-indigo-600' : 'text-slate-400'}`}>{h.score.split(':')[0]}</span>
-                            <span className="text-xs font-bold text-gray-300">:</span>
-                            <span className={`text-sm font-black ${h.score.split(':')[1] > h.score.split(':')[0] ? 'text-indigo-600' : 'text-slate-400'}`}>{h.score.split(':')[1]}</span>
-                          </div>
-                          <div 
-                            onClick={() => {
-                              if (h.detailUrl) {
-                                setActiveDetailTab('compare');
-                                fetchDetail(h.detailUrl);
-                                setSelectedPlayer(null);
-                              }
-                            }}
-                            className="flex-1 text-sm font-bold text-slate-700 text-right cursor-pointer hover:text-indigo-600 hover:underline"
-                          >
-                            {formatSchoolName(h.teamB)}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-100">
-                          <div className="text-center">
-                            <div className="text-[10px] text-gray-400 font-medium">G/S</div>
-                            <div className="text-xs font-black text-slate-700">{h.gs}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-[10px] text-gray-400 font-medium">성공률</div>
-                            <div className="text-xs font-black text-slate-700">{h.rate}%</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-[10px] text-gray-400 font-medium">어시스트</div>
-                            <div className="text-xs font-black text-slate-700">{h.as}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-[10px] text-gray-400 font-medium">스틸</div>
-                            <div className="text-xs font-black text-slate-700">{h.st}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-20 text-center text-gray-400">
-                    <p className="text-sm font-medium">등록된 선수 기록이 없습니다.</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {renderPlayerModal()}
+      {/* School Recent Matches Modal */}
+      {renderSchoolRecentModal()}
       {/* Term Explanation Popup */}
       {renderTermExplanationPopup()}
     </div>
