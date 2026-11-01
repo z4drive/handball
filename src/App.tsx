@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ChevronDown, Home, ChevronRight, ArrowUp, ExternalLink, X, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -83,6 +83,7 @@ export default function App() {
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [selectedPlayerTeam, setSelectedPlayerTeam] = useState<string | undefined>(undefined);
+  const [selectedPlayerIsGoalie, setSelectedPlayerIsGoalie] = useState(false);
   const [playerHistory, setPlayerHistory] = useState<any[]>([]);
   const [playerLoading, setPlayerLoading] = useState(false);
   
@@ -94,14 +95,16 @@ export default function App() {
   const [playerExtraRecords, setPlayerExtraRecords] = useState<any | null>(null);
   const [extraRecordsLoading, setExtraRecordsLoading] = useState(false);
 
-  // 웹앱 업데이트 감지 상태 (소스 수정 후 실행 시 업데이트 알림)
+  // 웹앱 업데이트 감지 상태 (소스 수정 후 배포 시 업데이트 알림 팝업)
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const initialLoadedVersionRef = useRef<string | null>(null);
 
   const handleClosePlayer = () => {
     if (window.history.state?.modal === 'player') {
       window.history.back();
     } else {
       setSelectedPlayer(null);
+      setSelectedPlayerIsGoalie(false);
       setPlayerPortalInfo(null);
       setShowPortalTab(false);
     }
@@ -402,19 +405,40 @@ export default function App() {
     );
   };
 
-  // 앱 소스 수정 시 업데이트 감지 배너 및 재실행 버튼
-  const renderUpdateBanner = () => {
+  // 앱 소스 수정 및 깃허브 배포 시 업데이트 감지 알림 팝업 모달
+  const renderUpdatePopup = () => {
     if (!updateAvailable) return null;
     return (
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[300] bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
-        <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />
-        <span className="text-xs font-bold">새로운 앱 업데이트가 있습니다.</span>
-        <button 
-          onClick={handleApplyUpdate} 
-          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-black rounded-xl shadow-md transition-all cursor-pointer"
-        >
-          재실행
-        </button>
+      <div className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-gray-100 text-center space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl mx-auto flex items-center justify-center shadow-inner">
+            <RefreshCw className="w-7 h-7 animate-spin" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">
+              새로운 버전이 배포되었습니다
+            </h3>
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              최신 소스코드 수정사항이 배포되었습니다.<br />
+              재실행하시면 새로운 최신 화면으로 즉시 갱신됩니다.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-2">
+            <button 
+              onClick={handleApplyUpdate}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white text-sm font-black rounded-2xl shadow-lg shadow-indigo-200 transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>지금 재실행</span>
+            </button>
+            <button 
+              onClick={() => setUpdateAvailable(false)}
+              className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+            >
+              나중에 하기
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -573,6 +597,10 @@ export default function App() {
       : playerHistory;
     const matchesToShow = filteredMatches.length > 0 ? filteredMatches : playerHistory;
 
+    const isCurrentPlayerGoalie = selectedPlayerIsGoalie 
+      || playerHistory.some(h => h.isGoalie) 
+      || (playerPortalInfo?.recentMatchRecords && playerPortalInfo.recentMatchRecords.some((m: any) => m.position === 'GK'));
+
     return (
       <AnimatePresence>
         <motion.div 
@@ -597,6 +625,7 @@ export default function App() {
                   </h2>
                   <p className="text-xs text-indigo-600 font-black mt-1 uppercase tracking-widest">
                     {selectedPlayerTeam ? formatSchoolName(selectedPlayerTeam) : 'Player Profile & Stats'}
+                    {isCurrentPlayerGoalie ? ' · 골키퍼(GK)' : ''}
                   </p>
                 </div>
                 {/* 오른쪽 상단 창닫기 버튼 x 자로 변경 */}
@@ -668,70 +697,61 @@ export default function App() {
                     </div>
                   ) : primaryPlayer ? (
                     <div className="space-y-4">
-                      {/* 선수 기본 정보 단일 카드 (중복 방지: 상단에 1개만 단일 표시) */}
-                      <div className="bg-white p-5 rounded-3xl border border-indigo-100/80 space-y-3 shadow-sm">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-base font-black text-slate-800">{primaryPlayer.name}</span>
-                            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${primaryPlayer.gender === '남자' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
-                              {primaryPlayer.gender}
-                            </span>
-                            <span className="text-[10px] font-black px-2.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100">
-                              {primaryPlayer.sport || '핸드볼'}
-                            </span>
-                          </div>
-                          {/* 요구사항: 선수정보에서 최초등록은 출생년도라고 바꿔주고 */}
-                          <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
-                            출생년도 {primaryPlayer.regYear ? `${primaryPlayer.regYear}년` : '-'}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-gray-100">
-                          <div className="bg-slate-50 p-2.5 rounded-2xl text-center">
-                            <div className="text-[9px] text-gray-400 font-bold uppercase">소속팀(학교)</div>
-                            <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{formatSchoolName(primaryPlayer.team) || '-'}</div>
-                          </div>
-                          <div className="bg-slate-50 p-2.5 rounded-2xl text-center">
-                            <div className="text-[9px] text-gray-400 font-bold uppercase">종별</div>
-                            <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{primaryPlayer.category || '-'}</div>
-                          </div>
-                          <div className="bg-slate-50 p-2.5 rounded-2xl text-center">
-                            <div className="text-[9px] text-gray-400 font-bold uppercase">시도</div>
-                            <div className="text-xs font-black text-slate-800 mt-0.5 truncate">{primaryPlayer.sido || '-'}</div>
-                          </div>
-                        </div>
+                      {/* 선수 기본 정보 테이블 (이미지 f07de002.png 상단 표와 100% 동일: 이름 | 성별 | 출생년도 | 시도 | 종별 | 종목) */}
+                      <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
+                        <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 font-bold">
+                              <th className="border border-gray-200 px-4 py-2 text-center text-xs">이름</th>
+                              <th className="border border-gray-200 px-4 py-2 text-center text-xs">성별</th>
+                              <th className="border border-gray-200 px-4 py-2 text-center text-xs">출생년도</th>
+                              <th className="border border-gray-200 px-4 py-2 text-center text-xs">시도</th>
+                              <th className="border border-gray-200 px-4 py-2 text-center text-xs">종별</th>
+                              <th className="border border-gray-200 px-4 py-2 text-center text-xs">종목</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 text-slate-800 font-semibold">
+                            <tr className="hover:bg-slate-50">
+                              <td className="border border-gray-200 px-4 py-2 text-center font-black text-slate-800">{primaryPlayer.name}</td>
+                              <td className="border border-gray-200 px-4 py-2 text-center">{primaryPlayer.gender}</td>
+                              <td className="border border-gray-200 px-4 py-2 text-center">{primaryPlayer.regYear || '-'}</td>
+                              <td className="border border-gray-200 px-4 py-2 text-center">{primaryPlayer.sido || '-'}</td>
+                              <td className="border border-gray-200 px-4 py-2 text-center">{primaryPlayer.category || '-'}</td>
+                              <td className="border border-gray-200 px-4 py-2 text-center">{primaryPlayer.sport || '핸드볼'}</td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
 
-                      {/* 등록이력 (요구사항: 등록이력 이름은 경기인 등록이력이 아니고 등록이력이라 해주고) */}
+                      {/* 등록이력 (이미지 f07de002.png 중단 표와 100% 동일: 등록이력 N건 / 등록년도 | 종목 | 종별 | 시도 | 소속팀 | 등록구분) */}
                       {playerPortalInfo?.detailedHistories && playerPortalInfo.detailedHistories.length > 0 && (
                         <div className="space-y-2 pt-2">
                           <div className="flex items-center justify-between px-1">
-                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                              등록이력
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              총 {playerPortalInfo.detailedHistories.length}건
+                            <span className="text-xs font-black text-slate-700 tracking-tight">
+                              등록이력 <span className="text-slate-400 font-normal">{playerPortalInfo.detailedHistories.length}건</span>
                             </span>
                           </div>
-                          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
-                            <table className="w-full text-left border-collapse text-xs">
+                          <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
+                            <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
                               <thead>
-                                <tr className="bg-slate-50 border-b border-gray-100">
-                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">등록년도</th>
-                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">소속팀(학교)</th>
-                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">종별</th>
-                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">시도</th>
-                                  <th className="px-3 py-2 text-[9px] font-black text-gray-400 text-center">구분</th>
+                                <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 font-bold">
+                                  <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">등록년도</th>
+                                  <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">종목</th>
+                                  <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">종별</th>
+                                  <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">시도</th>
+                                  <th className="border border-gray-200 px-4 py-2 text-center text-[10px]">소속팀</th>
+                                  <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">등록구분</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-gray-50">
+                              <tbody className="divide-y divide-gray-200 text-slate-700">
                                 {playerPortalInfo.detailedHistories.map((hist: any, hIdx: number) => (
-                                  <tr key={hIdx} className="hover:bg-slate-50/50">
-                                    <td className="px-3 py-2 font-black text-slate-700 text-center">{hist.year}</td>
-                                    <td className="px-3 py-2 font-bold text-slate-800 text-center">{formatSchoolName(hist.team)}</td>
-                                    <td className="px-3 py-2 text-slate-500 text-center">{hist.category}</td>
-                                    <td className="px-3 py-2 text-slate-400 text-center">{hist.sido}</td>
-                                    <td className="px-3 py-2 text-slate-400 text-center text-[10px]">{hist.regType}</td>
+                                  <tr key={hIdx} className="hover:bg-slate-50 transition-colors">
+                                    <td className="border border-gray-200 px-3 py-2 font-bold text-slate-700 text-center">{hist.year}</td>
+                                    <td className="border border-gray-200 px-3 py-2 text-slate-600 text-center">{hist.sport || '핸드볼'}</td>
+                                    <td className="border border-gray-200 px-3 py-2 text-slate-500 text-center">{hist.category}</td>
+                                    <td className="border border-gray-200 px-3 py-2 text-slate-400 text-center">{hist.sido}</td>
+                                    <td className="border border-gray-200 px-4 py-2 font-bold text-slate-800 text-center">{formatSchoolName(hist.team)}</td>
+                                    <td className="border border-gray-200 px-3 py-2 text-slate-400 text-center text-[10px]">{hist.regType || '학교운동부'}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -761,14 +781,9 @@ export default function App() {
                       {/* 최근 경기실적 테이블 (스포츠지원포털 경기실적 - 이미지 1과 일치) */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between px-1">
-                          <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                            최근 경기실적
+                          <span className="text-xs font-black text-slate-700 tracking-tight">
+                            최근 경기실적 {playerPortalInfo?.recentMatchRecords && <span className="text-slate-400 font-normal">{playerPortalInfo.recentMatchRecords.length}건</span>}
                           </span>
-                          {playerPortalInfo?.recentMatchRecords && (
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              총 {playerPortalInfo.recentMatchRecords.length}건
-                            </span>
-                          )}
                         </div>
                         <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
                           <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
@@ -867,22 +882,45 @@ export default function App() {
                                 </div>
                               </div>
                               <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-200/60 text-center">
-                                <div>
-                                  <div className="text-[9px] text-gray-400 font-black uppercase">G/S</div>
-                                  <div className="text-xs font-black text-slate-800">{h.gs}</div>
-                                </div>
-                                <div>
-                                  <div className="text-[9px] text-gray-400 font-black uppercase">성공률</div>
-                                  <div className="text-xs font-black text-slate-800">{h.rate}%</div>
-                                </div>
-                                <div>
-                                  <div className="text-[9px] text-gray-400 font-black uppercase">어시스트</div>
-                                  <div className="text-xs font-black text-indigo-600">{h.as}</div>
-                                </div>
-                                <div>
-                                  <div className="text-[9px] text-gray-400 font-black uppercase">스틸</div>
-                                  <div className="text-xs font-black text-indigo-600">{h.st}</div>
-                                </div>
+                                {isCurrentPlayerGoalie ? (
+                                  <>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">방어율</div>
+                                      <div className="text-xs font-black text-slate-800">{h.rate ? (h.rate.includes('%') ? h.rate : `${h.rate}%`) : '0%'}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">세이브(SV)</div>
+                                      <div className="text-xs font-black text-emerald-600">{h.sv || (h.gs?.startsWith('SV:') ? h.gs.replace('SV:', '') : '0')}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">GK득점(GKG)</div>
+                                      <div className="text-xs font-black text-indigo-600">{h.gkg || '0'}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">GK어시스트</div>
+                                      <div className="text-xs font-black text-indigo-600">{h.gkas || h.as || '0'}</div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">G/S</div>
+                                      <div className="text-xs font-black text-slate-800">{h.gs}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">성공률</div>
+                                      <div className="text-xs font-black text-slate-800">{h.rate}%</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">어시스트</div>
+                                      <div className="text-xs font-black text-indigo-600">{h.as}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-gray-400 font-black uppercase">스틸</div>
+                                      <div className="text-xs font-black text-indigo-600">{h.st}</div>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -899,6 +937,62 @@ export default function App() {
                   {/* 통산 요약 통계 */}
                   {(() => {
                     const totalMatches = matchesToShow.length;
+                    if (isCurrentPlayerGoalie) {
+                      let totalSv = 0;
+                      let totalGkg = 0;
+                      let totalGkas = 0;
+                      let rateSum = 0;
+                      let rateCount = 0;
+
+                      matchesToShow.forEach(m => {
+                        if (m.sv) {
+                          totalSv += parseInt(m.sv) || 0;
+                        } else if (m.gs && m.gs.startsWith('SV:')) {
+                          totalSv += parseInt(m.gs.replace('SV:', '')) || 0;
+                        }
+                        totalGkg += parseInt(m.gkg) || 0;
+                        totalGkas += parseInt(m.gkas) || 0;
+                        const r = parseFloat((m.rate || '').replace('%', ''));
+                        if (!isNaN(r) && r > 0) {
+                          rateSum += r;
+                          rateCount++;
+                        }
+                      });
+
+                      const avgRate = rateCount > 0 ? (rateSum / rateCount).toFixed(1) : (matchesToShow[0]?.rate?.replace('%', '') || "0");
+
+                      return (
+                        <div className="bg-slate-900 text-white rounded-3xl p-5 space-y-4 shadow-lg">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                            <span className="text-xs font-black tracking-wider text-slate-300">
+                              {selectedPlayer} 골키퍼(GK) 역대 통산 기록 요약
+                            </span>
+                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950 px-2.5 py-0.5 rounded-full">
+                              총 {totalMatches}경기 출전
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            <div className="bg-slate-800/80 p-3 rounded-2xl">
+                              <div className="text-[9px] text-slate-400 font-bold uppercase">평균 방어율</div>
+                              <div className="text-base font-black text-emerald-400 mt-0.5">{avgRate}%</div>
+                            </div>
+                            <div className="bg-slate-800/80 p-3 rounded-2xl">
+                              <div className="text-[9px] text-slate-400 font-bold uppercase">통산 세이브(SV)</div>
+                              <div className="text-base font-black text-white mt-0.5">{totalSv}회</div>
+                            </div>
+                            <div className="bg-slate-800/80 p-3 rounded-2xl">
+                              <div className="text-[9px] text-slate-400 font-bold uppercase">GK 득점</div>
+                              <div className="text-base font-black text-white mt-0.5">{totalGkg}골</div>
+                            </div>
+                            <div className="bg-slate-800/80 p-3 rounded-2xl">
+                              <div className="text-[9px] text-slate-400 font-bold uppercase">GK 어시스트</div>
+                              <div className="text-base font-black text-indigo-400 mt-0.5">{totalGkas}회</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     let totalGoals = 0;
                     let totalShots = 0;
                     let totalAs = 0;
@@ -951,14 +1045,9 @@ export default function App() {
                   {/* 역대 경기실적 테이블 (스포츠지원포털 경기실적 - 이미지 1과 일치) */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                        역대 대회 및 경기 실적
+                      <span className="text-xs font-black text-slate-700 tracking-tight">
+                        역대 경기실적 {playerPortalInfo?.recentMatchRecords && <span className="text-slate-400 font-normal">{playerPortalInfo.recentMatchRecords.length}건</span>}
                       </span>
-                      {playerPortalInfo?.recentMatchRecords && (
-                        <span className="text-[10px] text-slate-400 font-bold">
-                          총 {playerPortalInfo.recentMatchRecords.length}건
-                        </span>
-                      )}
                     </div>
                     <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
                       <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
@@ -1005,6 +1094,102 @@ export default function App() {
                       </table>
                     </div>
                   </div>
+
+                  {/* KHF 역대 공식 경기 세부 기록 (골키퍼는 방어율/SV/GKG/GKAS 골키퍼 전용 기록 표시) */}
+                  {matchesToShow.length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-gray-100">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                          {isCurrentPlayerGoalie ? '골키퍼(GK) 공식 경기 세부 기록' : '협회 공식 경기 세부 기록'} ({matchesToShow.length}경기)
+                        </span>
+                        {selectedPlayerTeam && (
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+                            {formatSchoolName(selectedPlayerTeam)}
+                          </span>
+                        )}
+                      </div>
+                      {matchesToShow.map((h, i) => (
+                        <div key={i} className="bg-slate-50 p-5 rounded-3xl border border-gray-100 space-y-3 shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black text-indigo-600 px-3 py-1 bg-white rounded-full shadow-2xs border border-indigo-50">{h.tournament}</span>
+                            <span className="text-[10px] font-black text-slate-400">{h.date}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div 
+                              onClick={() => {
+                                if (h.detailUrl) {
+                                  setActiveDetailTab('compare');
+                                  fetchDetail(h.detailUrl);
+                                  setSelectedPlayer(null);
+                                }
+                              }}
+                              className="flex-1 text-sm font-black text-slate-800 leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+                            >
+                              {formatSchoolName(h.teamA)}
+                            </div>
+                            <div className="mx-4 flex items-center space-x-2">
+                              <span className={`text-lg font-black ${parseInt(h.score?.split(':')[0]) > parseInt(h.score?.split(':')[1]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score?.split(':')[0] || '-'}</span>
+                              <span className="text-xs font-bold text-gray-300">:</span>
+                              <span className={`text-lg font-black ${parseInt(h.score?.split(':')[1]) > parseInt(h.score?.split(':')[0]) ? 'text-red-600' : 'text-slate-400'}`}>{h.score?.split(':')[1] || '-'}</span>
+                            </div>
+                            <div 
+                              onClick={() => {
+                                if (h.detailUrl) {
+                                  setActiveDetailTab('compare');
+                                  fetchDetail(h.detailUrl);
+                                  setSelectedPlayer(null);
+                                }
+                              }}
+                              className="flex-1 text-sm font-black text-slate-800 text-right leading-tight cursor-pointer hover:text-indigo-600 hover:underline"
+                            >
+                              {formatSchoolName(h.teamB)}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-200/60 text-center">
+                            {isCurrentPlayerGoalie ? (
+                              <>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">방어율</div>
+                                  <div className="text-xs font-black text-slate-800">{h.rate ? (h.rate.includes('%') ? h.rate : `${h.rate}%`) : '0%'}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">세이브(SV)</div>
+                                  <div className="text-xs font-black text-emerald-600">{h.sv || (h.gs?.startsWith('SV:') ? h.gs.replace('SV:', '') : '0')}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">GK득점(GKG)</div>
+                                  <div className="text-xs font-black text-indigo-600">{h.gkg || '0'}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">GK어시스트</div>
+                                  <div className="text-xs font-black text-indigo-600">{h.gkas || h.as || '0'}</div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">G/S</div>
+                                  <div className="text-xs font-black text-slate-800">{h.gs}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">성공률</div>
+                                  <div className="text-xs font-black text-slate-800">{h.rate}%</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">어시스트</div>
+                                  <div className="text-xs font-black text-indigo-600">{h.as}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-gray-400 font-black uppercase">스틸</div>
+                                  <div className="text-xs font-black text-indigo-600">{h.st}</div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1034,6 +1219,7 @@ export default function App() {
       if (!state || !state.modal) {
         // 메인 화면으로 복귀
         setSelectedPlayer(null);
+        setSelectedPlayerIsGoalie(false);
         setSelectedSchoolModal(null);
         setPlayerPortalInfo(null);
         setShowPortalTab(false);
@@ -1043,6 +1229,7 @@ export default function App() {
       } else if (state.modal === 'matchDetail') {
         // 경기 상세 화면 유지 (선수 기록 모달 및 학교 모달만 닫기)
         setSelectedPlayer(null);
+        setSelectedPlayerIsGoalie(false);
         setSelectedSchoolModal(null);
         setPlayerPortalInfo(null);
         setShowPortalTab(false);
@@ -1246,12 +1433,13 @@ export default function App() {
     }
   };
 
-  const fetchPlayerHistory = async (playerName: string, teamName?: string, isRefetch = false) => {
+  const fetchPlayerHistory = async (playerName: string, teamName?: string, isRefetch = false, isGoalie = false) => {
     if (!selectedPlayer) {
       window.history.pushState({ modal: 'player' }, '');
     }
     setSelectedPlayer(playerName);
     setSelectedPlayerTeam(teamName);
+    setSelectedPlayerIsGoalie(isGoalie);
     
     // 포털 정보 및 구글링 실적 정보도 함께 로드
     fetchPlayerPortalInfo(playerName, teamName, isRefetch);
@@ -1277,7 +1465,7 @@ export default function App() {
     setPlayerLoading(true);
     setPlayerHistory([]);
     try {
-      const url = `/api/player-history?name=${encodeURIComponent(playerName)}${teamName ? `&team=${encodeURIComponent(teamName)}` : ''}`;
+      const url = `/api/player-history?name=${encodeURIComponent(playerName)}${teamName ? `&team=${encodeURIComponent(teamName)}` : ''}${isGoalie ? '&isGoalie=true' : ''}`;
       const response = await axios.get(url);
       const history = response.data.history || [];
       setPlayerHistory(history);
@@ -1418,39 +1606,114 @@ export default function App() {
     }
   };
 
-  // 소스 수정 후 웹앱 실행 시 업데이트 알림 및 재실행 감지
+  // 소스 수정 및 깃허브 배포 시 재조회 없이도 즉시 업데이트 알림 팝업 감지
   useEffect(() => {
+    let isChecking = false;
+
     const checkAppVersion = async () => {
+      if (isChecking) return;
+      isChecking = true;
       try {
-        const res = await axios.get("/api/app-version", { timeout: 4000 });
-        if (res.data && res.data.version) {
-          const currentVersion = res.data.version;
+        let serverVersion = "";
+        const timestamp = Date.now();
+
+        // 1. /api/app-version 확인 (Express 백엔드 실행 환경)
+        try {
+          const res = await axios.get(`/api/app-version?t=${timestamp}`, {
+            headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+            timeout: 3000
+          });
+          if (res.data?.version) {
+            serverVersion = res.data.version;
+          }
+        } catch (apiErr) {
+          // fallback to static version.json
+        }
+
+        // 2. /version.json 확인 (깃허브 배포 및 정적 호스팅 환경 대비)
+        if (!serverVersion) {
+          try {
+            const resStatic = await axios.get(`/version.json?t=${timestamp}`, {
+              headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+              timeout: 3000
+            });
+            if (resStatic.data?.version) {
+              serverVersion = resStatic.data.version;
+            }
+          } catch (stErr) {
+            // ignore
+          }
+        }
+
+        if (serverVersion) {
           const storedVersion = localStorage.getItem("handball_app_current_version");
-          if (storedVersion && storedVersion !== currentVersion) {
+
+          // 최초 로드 시 현재 버전 기록
+          if (!initialLoadedVersionRef.current) {
+            initialLoadedVersionRef.current = serverVersion;
+          }
+
+          // 앱이 실행 중인 상태에서 새 소스코드가 배포되어 버전이 변경되었거나,
+          // 저장된 기존 버전과 서버 버전이 다르면 팝업 표시
+          if (
+            (initialLoadedVersionRef.current && initialLoadedVersionRef.current !== serverVersion) ||
+            (storedVersion && storedVersion !== serverVersion)
+          ) {
             setUpdateAvailable(true);
           } else {
-            localStorage.setItem("handball_app_current_version", currentVersion);
+            localStorage.setItem("handball_app_current_version", serverVersion);
           }
         }
       } catch (e) {
-        // ignore version check failure
+        // ignore
+      } finally {
+        isChecking = false;
       }
     };
 
+    // 1. 마운트 시 즉시 체크
     checkAppVersion();
-    const interval = setInterval(checkAppVersion, 30000); // 30초마다 새 업데이트 확인
-    return () => clearInterval(interval);
+
+    // 2. 10초 주기로 백그라운드 자동 체크 (재조회 누르지 않아도 배포 즉시 감지)
+    const interval = setInterval(checkAppVersion, 10000);
+
+    // 3. 브라우저 탭 활성화(포커스) 또는 화면 전환 시 즉시 체크
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkAppVersion();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', checkAppVersion);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', checkAppVersion);
+    };
   }, []);
 
-  const handleApplyUpdate = () => {
-    // 최신 버전 저장 후 페이지 새로고침(재실행)
-    axios.get("/api/app-version").then((res) => {
-      if (res.data?.version) {
+  const handleApplyUpdate = async () => {
+    try {
+      // 최신 버전 조회 후 저장
+      const res = await axios.get(`/api/app-version?t=${Date.now()}`).catch(() => 
+        axios.get(`/version.json?t=${Date.now()}`)
+      );
+      if (res?.data?.version) {
         localStorage.setItem("handball_app_current_version", res.data.version);
       }
-    }).finally(() => {
+    } catch (e) {
+      // ignore
+    } finally {
+      // 브라우저 캐시 무효화 후 페이지 새로고침
+      if ('caches' in window) {
+        try {
+          const cacheKeys = await caches.keys();
+          await Promise.all(cacheKeys.map(k => caches.delete(k)));
+        } catch (cErr) {}
+      }
       window.location.reload();
-    });
+    }
   };
 
   useEffect(() => {
@@ -1472,7 +1735,7 @@ export default function App() {
   if (matchDetail || detailLoading) {
     return (
       <div className="min-h-screen bg-white font-sans text-slate-900 pb-20">
-        {renderUpdateBanner()}
+        {renderUpdatePopup()}
         {/* Detail Page Header */}
         <div className="bg-white px-6 pt-8 pb-4 border-b border-gray-100 sticky top-0 z-50 flex items-center">
           <button 
@@ -1503,12 +1766,12 @@ export default function App() {
                 <div className="text-gray-400 text-sm font-medium">{matchDetail.matchInfo}</div>
               </div>
 
-              {/* Professional Scoreboard */}
-              <div className="flex items-center justify-between py-6 px-4 bg-white rounded-3xl border border-gray-100 shadow-lg shadow-slate-100/60">
+              {/* Professional Scoreboard (grid 1fr auto 1fr로 긴 학교명이어도 전반전/후반전 완벽한 가운데 정렬) */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center py-6 px-3 sm:px-4 bg-white rounded-3xl border border-gray-100 shadow-lg shadow-slate-100/60">
                 {/* Home */}
                 <div 
                   onClick={() => handleOpenSchoolRecentMatches(matchDetail.homeTeam)}
-                  className="flex flex-col items-center flex-1 cursor-pointer group transition-transform active:scale-95"
+                  className="flex flex-col items-center justify-center min-w-0 w-full cursor-pointer group transition-transform active:scale-95 px-1"
                   title="학교 최근경기실적 보기"
                 >
                   <div className={`text-4xl sm:text-5xl font-black mb-2 transition-all duration-300 ${
@@ -1516,13 +1779,13 @@ export default function App() {
                       ? 'text-red-600 scale-105' : 'text-slate-800'}`}>
                     {matchDetail.totalScore.split(':')[0] || '0'}
                   </div>
-                  <span className="text-sm sm:text-base font-black text-slate-800 group-hover:text-indigo-600 group-hover:underline text-center break-keep leading-tight px-1">
+                  <span className="text-sm sm:text-base font-black text-slate-800 group-hover:text-indigo-600 group-hover:underline text-center break-keep leading-tight px-1 max-w-full">
                     {formatSchoolName(matchDetail.homeTeam)}
                   </span>
                 </div>
 
-                {/* Center: Period Scores (전반전 / 후반전 각각 밑에 점수 표시) */}
-                <div className="flex flex-col items-center justify-center px-4 py-2.5 bg-slate-900 text-white rounded-2xl shadow-md min-w-[90px] space-y-1.5 border border-slate-800 mx-2">
+                {/* Center: Period Scores (전반전 / 후반전 각각 밑에 점수 표시 - 항상 정가운데 고정) */}
+                <div className="flex flex-col items-center justify-center px-3 sm:px-4 py-2.5 bg-slate-900 text-white rounded-2xl shadow-md min-w-[85px] sm:min-w-[95px] space-y-1.5 border border-slate-800 mx-auto shrink-0">
                   {matchDetail.periodScores && matchDetail.periodScores.length > 0 ? (
                     matchDetail.periodScores.map((period, i) => (
                       <div key={i} className="flex flex-col items-center w-full">
@@ -1547,7 +1810,7 @@ export default function App() {
                 {/* Away */}
                 <div 
                   onClick={() => handleOpenSchoolRecentMatches(matchDetail.awayTeam)}
-                  className="flex flex-col items-center flex-1 cursor-pointer group transition-transform active:scale-95"
+                  className="flex flex-col items-center justify-center min-w-0 w-full cursor-pointer group transition-transform active:scale-95 px-1"
                   title="학교 최근경기실적 보기"
                 >
                   <div className={`text-4xl sm:text-5xl font-black mb-2 transition-all duration-300 ${
@@ -1555,7 +1818,7 @@ export default function App() {
                       ? 'text-red-600 scale-105' : 'text-slate-800'}`}>
                     {matchDetail.totalScore.split(':')[1] || '0'}
                   </div>
-                  <span className="text-sm sm:text-base font-black text-slate-800 group-hover:text-indigo-600 group-hover:underline text-center break-keep leading-tight px-1">
+                  <span className="text-sm sm:text-base font-black text-slate-800 group-hover:text-indigo-600 group-hover:underline text-center break-keep leading-tight px-1 max-w-full">
                     {formatSchoolName(matchDetail.awayTeam)}
                   </span>
                 </div>
@@ -1705,7 +1968,7 @@ export default function App() {
                                         <td className="px-1 py-2 text-xs font-black text-slate-400 sticky left-0 bg-white group-hover:bg-slate-50 z-10 text-center">{p.no}</td>
                                         <td className="px-1.5 py-2 text-xs font-black text-indigo-600 sticky left-[28px] bg-white group-hover:bg-slate-50 z-10 border-r border-gray-100 whitespace-nowrap text-left">
                                           <button 
-                                            onClick={() => fetchPlayerHistory(p.name, t.name)}
+                                            onClick={() => fetchPlayerHistory(p.name, t.name, false, false)}
                                             className="hover:underline text-left font-bold"
                                           >
                                             {p.name}
@@ -1742,67 +2005,61 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* 골키퍼 (GK) - 사용자 첨부 이미지 2와 동일한 2단 헤더 및 15개 컬럼 표 */}
+                            {/* 골키퍼 (GK) - 필드 플레이어와 100% 동일한 인터페이스 */}
                             {goalies.length > 0 && (
-                              <div className="pt-3 border-t border-gray-100">
-                                <div className="px-5 py-2 flex items-center justify-between">
+                              <div className="pt-2 border-t border-gray-100">
+                                <div className="px-5 py-1.5 flex items-center justify-between">
                                   <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                                     <span>골키퍼</span>
                                     <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{goalies.length}명</span>
                                   </span>
                                 </div>
-                                <div className="overflow-x-auto scrollbar-hide px-3 pb-2">
-                                  <table className="w-full text-center border-collapse whitespace-nowrap min-w-max border border-gray-200">
+                                <div className="overflow-x-auto scrollbar-hide">
+                                  <table className="w-full text-center border-collapse whitespace-nowrap min-w-max">
                                     <thead>
-                                      <tr className="bg-slate-50 border-b border-gray-200 text-slate-700">
-                                        <th colSpan={2} className="border border-gray-200 py-1.5 text-xs font-bold">Player</th>
-                                        <th colSpan={4} className="border border-gray-200 py-1.5 text-xs font-bold">기본기록</th>
-                                        <th colSpan={6} className="border border-gray-200 py-1.5 text-xs font-bold">유형별 방어율</th>
-                                        <th colSpan={3} className="border border-gray-200 py-1.5 text-xs font-bold">위치별 방어율</th>
-                                      </tr>
-                                      <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 text-xs font-bold">
-                                        <th onClick={(e) => handleOpenTerm('No', e)} className="border border-gray-200 px-2 py-1.5 cursor-pointer hover:text-indigo-600 min-w-[36px]">No</th>
-                                        <th onClick={(e) => handleOpenTerm('Name', e)} className="border border-gray-200 px-3 py-1.5 cursor-pointer hover:text-indigo-600 min-w-[60px]">Name</th>
-                                        <th onClick={(e) => handleOpenTerm('방어율', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">방어율</th>
-                                        <th onClick={(e) => handleOpenTerm('SV', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">SV</th>
-                                        <th onClick={(e) => handleOpenTerm('GKG', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">GKG</th>
-                                        <th onClick={(e) => handleOpenTerm('GKAS', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">GKAS</th>
-                                        <th onClick={(e) => handleOpenTerm('Wing', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">Wing</th>
-                                        <th onClick={(e) => handleOpenTerm('6m', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">6m</th>
-                                        <th onClick={(e) => handleOpenTerm('9m', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">9m</th>
-                                        <th onClick={(e) => handleOpenTerm('7m', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">7m</th>
-                                        <th onClick={(e) => handleOpenTerm('FB', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">FB</th>
-                                        <th onClick={(e) => handleOpenTerm('BT', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">BT</th>
-                                        <th onClick={(e) => handleOpenTerm('High', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">High</th>
-                                        <th onClick={(e) => handleOpenTerm('Mid', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">Mid</th>
-                                        <th onClick={(e) => handleOpenTerm('Low', e)} className="border border-gray-200 px-2.5 py-1.5 cursor-pointer hover:text-indigo-600">Low</th>
+                                      <tr className="bg-slate-50/80 border-b border-gray-100">
+                                        <th onClick={(e) => handleOpenTerm('No.', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 sticky left-0 bg-slate-50 z-20 cursor-pointer hover:text-indigo-600 uppercase min-w-[28px]">No.</th>
+                                        <th onClick={(e) => handleOpenTerm('Name', e)} className="px-1.5 py-2 text-[10px] font-black text-gray-400 sticky left-[28px] bg-slate-50 z-20 border-r border-gray-100 cursor-pointer hover:text-indigo-600 uppercase text-left min-w-[48px]">Name</th>
+                                        <th onClick={(e) => handleOpenTerm('방어율', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">방어율</th>
+                                        <th onClick={(e) => handleOpenTerm('SV', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">SV</th>
+                                        <th onClick={(e) => handleOpenTerm('GKG', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">GKG</th>
+                                        <th onClick={(e) => handleOpenTerm('GKAS', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">GKAS</th>
+                                        <th onClick={(e) => handleOpenTerm('Wing', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Wing</th>
+                                        <th onClick={(e) => handleOpenTerm('6M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">6M</th>
+                                        <th onClick={(e) => handleOpenTerm('9M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">9M</th>
+                                        <th onClick={(e) => handleOpenTerm('7M', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">7M</th>
+                                        <th onClick={(e) => handleOpenTerm('FB', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">FB</th>
+                                        <th onClick={(e) => handleOpenTerm('BT', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">BT</th>
+                                        <th onClick={(e) => handleOpenTerm('High', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">High</th>
+                                        <th onClick={(e) => handleOpenTerm('Mid', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Mid</th>
+                                        <th onClick={(e) => handleOpenTerm('Low', e)} className="px-1 py-2 text-[10px] font-black text-gray-400 cursor-pointer hover:text-indigo-600 uppercase">Low</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-200">
+                                    <tbody className="divide-y divide-gray-50">
                                       {goalies.map((p, i) => (
                                         <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                          <td className="border border-gray-200 px-2 py-2 text-xs font-medium text-slate-700">{p.no}</td>
-                                          <td className="border border-gray-200 px-3 py-2 text-xs font-bold text-indigo-600">
+                                          <td className="px-1 py-2 text-xs font-black text-slate-400 sticky left-0 bg-white group-hover:bg-slate-50 z-10 text-center">{p.no}</td>
+                                          <td className="px-1.5 py-2 text-xs font-black text-indigo-600 sticky left-[28px] bg-white group-hover:bg-slate-50 z-10 border-r border-gray-100 whitespace-nowrap text-left">
                                             <button 
-                                              onClick={() => fetchPlayerHistory(p.name, t.name)}
-                                              className="hover:underline font-bold text-indigo-600"
+                                              onClick={() => fetchPlayerHistory(p.name, t.name, false, true)}
+                                              className="hover:underline text-left font-bold"
                                             >
                                               {p.name}
                                             </button>
                                           </td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.rate ? (p.rate.includes('%') ? p.rate : `${p.rate}%`) : '0%'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.sv || '0'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.gkg || '0'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.gkas || '0'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.wing ? (p.wing.includes('%') ? p.wing : `${p.wing}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.m6 ? (p.m6.includes('%') ? p.m6 : `${p.m6}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.m9 ? (p.m9.includes('%') ? p.m9 : `${p.m9}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.m7 ? (p.m7.includes('%') ? p.m7 : `${p.m7}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.fb ? (p.fb.includes('%') ? p.fb : `${p.fb}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.bt ? (p.bt.includes('%') ? p.bt : `${p.bt}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.high ? (p.high.includes('%') ? p.high : `${p.high}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.mid ? (p.mid.includes('%') ? p.mid : `${p.mid}%`) : '-'}</td>
-                                          <td className="border border-gray-200 px-2.5 py-2 text-xs font-medium text-slate-700">{p.low ? (p.low.includes('%') ? p.low : `${p.low}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-400 text-center">{p.rate ? (p.rate.includes('%') ? p.rate : `${p.rate}%`) : '0%'}</td>
+                                          <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.sv || '0'}</td>
+                                          <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.gkg || '0'}</td>
+                                          <td className="px-1 py-2 text-xs font-black text-indigo-600 text-center bg-indigo-50/20">{p.gkas || '0'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.wing ? (p.wing.includes('%') ? p.wing : `${p.wing}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.m6 ? (p.m6.includes('%') ? p.m6 : `${p.m6}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.m9 ? (p.m9.includes('%') ? p.m9 : `${p.m9}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.m7 ? (p.m7.includes('%') ? p.m7 : `${p.m7}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.fb ? (p.fb.includes('%') ? p.fb : `${p.fb}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.bt ? (p.bt.includes('%') ? p.bt : `${p.bt}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.high ? (p.high.includes('%') ? p.high : `${p.high}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.mid ? (p.mid.includes('%') ? p.mid : `${p.mid}%`) : '-'}</td>
+                                          <td className="px-1 py-2 text-[11px] font-bold text-slate-600 text-center">{p.low ? (p.low.includes('%') ? p.low : `${p.low}%`) : '-'}</td>
                                         </tr>
                                       ))}
                                     </tbody>
@@ -1831,13 +2088,15 @@ export default function App() {
         {renderSchoolRecentModal()}
         {/* Term Explanation Popup (단일 용어 전용 팝업 - 블러 제거, 배경 보임, 글자 위쪽 팝업) */}
         {renderTermExplanationPopup()}
+        {/* Update Notification Popup */}
+        {renderUpdatePopup()}
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#F3F4F6] font-sans text-slate-900 pb-20">
-      {renderUpdateBanner()}
+      {renderUpdatePopup()}
       {/* Top Header */}
       <div className="bg-white px-6 pt-8 pb-4 border-b border-gray-200 sticky top-0 z-50">
         <div className="flex justify-between items-center mb-6">

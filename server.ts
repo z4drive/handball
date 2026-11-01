@@ -15,11 +15,36 @@ async function startServer() {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
     'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
     'Upgrade-Insecure-Requests': '1',
     'Referer': 'https://khf.handballkorea.com/'
   };
+
+  // 연도별 경기 일정 HTML 메모리 캐시 (대용량 2.7MB 중복 다운로드 및 stream abort 방지)
+  const yearScheduleCache = new Map<number, { data: string; time: number }>();
+  async function getYearScheduleHtml(year: number): Promise<string | null> {
+    const cached = yearScheduleCache.get(year);
+    // 15분간 캐시 유지
+    if (cached && Date.now() - cached.time < 15 * 60 * 1000) {
+      return cached.data;
+    }
+    const url = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${year}&DS_MONTH=ALL`;
+    try {
+      const res = await axios.get(url, {
+        headers: scrapingHeaders,
+        timeout: 20000,
+        maxContentLength: 50 * 1024 * 1024,
+        maxBodyLength: 50 * 1024 * 1024
+      });
+      if (res.data && typeof res.data === 'string' && res.data.length > 500) {
+        yearScheduleCache.set(year, { data: res.data, time: Date.now() });
+        return res.data;
+      }
+    } catch (err: any) {
+      console.warn(`[getYearScheduleHtml] Notice for year ${year}: ${err?.message}`);
+      if (cached) return cached.data;
+    }
+    return null;
+  }
 
   async function fetchHtml(targetUrl: string): Promise<string> {
     try {
@@ -424,16 +449,11 @@ async function startServer() {
       const targetTeam = team as string;
       
       for (const year of years) {
-        // DS_MONTH=ALL을 사용하여 해당 연도의 모든 경기를 가져옵니다.
-        const url = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${year}&DS_MONTH=ALL`;
-        
         try {
-          const response = await axios.get(url, {
-            headers: scrapingHeaders,
-            timeout: 15000
-          });
+          const html = await getYearScheduleHtml(year);
+          if (!html) continue;
 
-          const $ = cheerio.load(response.data);
+          const $ = cheerio.load(html);
           let currentTournament = "";
           let currentDate = "";
 
@@ -486,8 +506,8 @@ async function startServer() {
               });
             }
           });
-        } catch (e) {
-          console.error(`Error fetching history for year ${year}:`, e);
+        } catch (e: any) {
+          console.warn(`[PlayerHistory] Notice for year ${year}: ${e?.message}`);
         }
       }
 
@@ -525,13 +545,18 @@ async function startServer() {
                 const statsTds = scrollRows.eq(i).find("td");
                 if (isGoalieTable) {
                   playerStats = {
-                    gs: `SV:${statsTds.eq(1).text().trim()}`,
+                    isGoalie: true,
                     rate: statsTds.eq(0).text().trim().replace('%', ''),
+                    sv: statsTds.eq(1).text().trim(),
+                    gkg: statsTds.length > 2 ? statsTds.eq(2).text().trim() : "0",
+                    gkas: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
+                    gs: `SV:${statsTds.eq(1).text().trim()}`,
                     as: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
                     st: "0"
                   };
                 } else {
                   playerStats = {
+                    isGoalie: false,
                     gs: statsTds.eq(0).text().trim(),
                     rate: statsTds.eq(1).text().trim().replace('%', ''),
                     as: statsTds.length > 8 ? statsTds.eq(8).text().trim() : "0",
@@ -544,6 +569,10 @@ async function startServer() {
 
           return {
             ...m,
+            isGoalie: playerStats ? (playerStats as any).isGoalie : false,
+            sv: playerStats ? (playerStats as any).sv : "0",
+            gkg: playerStats ? (playerStats as any).gkg : "0",
+            gkas: playerStats ? (playerStats as any).gkas : "0",
             gs: playerStats ? (playerStats as any).gs : "0/0",
             rate: playerStats ? (playerStats as any).rate : "0",
             as: playerStats ? (playerStats as any).as : "0",
@@ -552,6 +581,10 @@ async function startServer() {
         } catch (e) {
           return {
             ...m,
+            isGoalie: false,
+            sv: "0",
+            gkg: "0",
+            gkas: "0",
             gs: "0/0",
             rate: "0",
             as: "0",
@@ -761,8 +794,11 @@ async function startServer() {
   });
 
   // 앱 버전 확인 엔드포인트 (소스 수정 시 업데이트 알림 및 재실행용)
-  const APP_VERSION = "2026.10.31-v6";
+  const APP_VERSION = "2026.11.01-v1";
   app.get("/api/app-version", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.json({ version: APP_VERSION, timestamp: Date.now() });
   });
 
@@ -831,9 +867,9 @@ async function startServer() {
 
       for (const year of years) {
         try {
-          const url = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${year}&DS_MONTH=ALL`;
-          const response = await axios.get(url, { headers: scrapingHeaders, timeout: 12000 });
-          const $ = cheerio.load(response.data);
+          const html = await getYearScheduleHtml(year);
+          if (!html) continue;
+          const $ = cheerio.load(html);
           let currentTournament = "";
           let currentDate = "";
 
