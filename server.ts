@@ -1,8 +1,12 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import * as cheerio from "cheerio";
+
+// 서버 부팅 시 단 1회 생성되는 고정 버전 (호출 시마다 바뀌지 않도록 방지)
+const SERVER_BOOT_VERSION = "v_" + Date.now().toString(36);
 
 async function startServer() {
   const app = express();
@@ -794,12 +798,19 @@ async function startServer() {
   });
 
   // 앱 버전 확인 엔드포인트 (소스 수정 시 업데이트 알림 및 재실행용)
-  const APP_VERSION = "2026.11.01-v1";
   app.get("/api/app-version", (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
-    res.json({ version: APP_VERSION, timestamp: Date.now() });
+    let version = SERVER_BOOT_VERSION;
+    try {
+      const vPath = path.join(process.cwd(), "public", "version.json");
+      if (fs.existsSync(vPath)) {
+        const parsed = JSON.parse(fs.readFileSync(vPath, "utf-8"));
+        if (parsed.version) version = parsed.version;
+      }
+    } catch (e) {}
+    res.json({ version, timestamp: Date.now() });
   });
 
   // 웹/구글 검색 헬퍼 (최근 실적 및 역대 기록 구글링)

@@ -119,10 +119,16 @@ export default async function handler(req: any, res: any) {
     }
 
     let detailedHistories: any[] = [];
+    let recentMatchRecords: any[] = [];
     if (playerList.length > 0 && playerList[0].personNo) {
       try {
         const detailRes = await axios.post("https://g1.sports.or.kr/stat/playerSearchResult.do", 
           new URLSearchParams({
+            gubun: "P",
+            searchClassCd: "HB",
+            searchSidoCd: "",
+            searchSexCd: "",
+            searchName: name as string,
             classCd: playerList[0].classCd || "HB",
             personNo: playerList[0].personNo
           }).toString(),
@@ -133,30 +139,74 @@ export default async function handler(req: any, res: any) {
               "Referer": searchUrl,
               "Origin": "https://g1.sports.or.kr"
             },
-            timeout: 8000
+            timeout: 10000
           }
         );
 
         const $d = cheerio.load(detailRes.data);
-        $d("table tbody tr").each((_, tr) => {
-          const tds = $d(tr).find("td");
-          if (tds.length >= 6) {
-            const year = $d(tds[0]).text().trim();
-            const sport = $d(tds[1]).text().trim();
-            const category = $d(tds[2]).text().trim();
-            const sido = $d(tds[3]).text().trim();
-            const team = $d(tds[4]).text().trim();
-            const regType = $d(tds[5]).text().trim();
-            if (/^\d{4}$/.test(year) && sport) {
-              detailedHistories.push({
-                year,
-                sport,
-                category,
-                sido,
-                team,
-                regType
-              });
-            }
+        
+        $d(".lookup").each((_, lookup) => {
+          const title = $d(lookup).find(".lookup-header__title").text().trim();
+          
+          // 1. 등록이력 파싱
+          if (title.includes("등록이력")) {
+            $d(lookup).find("table tbody tr").each((_, tr) => {
+              const tds = $d(tr).find("td");
+              if (tds.length >= 6) {
+                const year = $d(tds[0]).text().trim();
+                const sport = $d(tds[1]).text().trim();
+                const category = $d(tds[2]).text().trim();
+                const sido = $d(tds[3]).text().trim();
+                const team = $d(tds[4]).text().trim();
+                const regType = $d(tds[5]).text().trim();
+                if (/^\d{4}$/.test(year) && sport) {
+                  detailedHistories.push({
+                    year,
+                    sport,
+                    category,
+                    sido,
+                    team,
+                    regType
+                  });
+                }
+              }
+            });
+          }
+
+          // 2. 최근 경기실적 파싱 (사용자 첨부 이미지 1에 해당하는 테이블)
+          if (title.includes("최근 경기실적")) {
+            $d(lookup).find("table tbody tr").each((_, tr) => {
+              const tds = $d(tr).find("td");
+              if (tds.length >= 10) {
+                const period = $d(tds[0]).text().replace(/\s+/g, ' ').trim();
+                const type = $d(tds[1]).text().trim();
+                const tournament = $d(tds[2]).text().trim();
+                const venue = $d(tds[3]).text().trim();
+                const teamCount = $d(tds[4]).text().trim();
+                const matchType = $d(tds[5]).text().trim();
+                const played = $d(tds[6]).text().trim();
+                const position = $d(tds[7]).text().trim();
+                const category = $d(tds[8]).text().trim();
+                const rank = $d(tds[9]).text().trim();
+                const remark = tds.length >= 11 ? $d(tds[10]).text().trim() : "";
+
+                if (period && tournament) {
+                  recentMatchRecords.push({
+                    period,
+                    type,
+                    tournament,
+                    venue,
+                    teamCount,
+                    matchType,
+                    played,
+                    position,
+                    category,
+                    rank,
+                    remark
+                  });
+                }
+              }
+            });
           }
         });
       } catch (e) {
@@ -169,7 +219,8 @@ export default async function handler(req: any, res: any) {
       source: "https://g1.sports.or.kr/stat/playerSearch.do?gubun=P",
       name,
       players: playerList,
-      detailedHistories
+      detailedHistories,
+      recentMatchRecords
     });
   } catch (error: any) {
     console.error("Player info error:", error.message);
