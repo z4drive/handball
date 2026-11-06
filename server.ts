@@ -525,8 +525,8 @@ async function startServer() {
       // 중복 제거 (토너먼트, 날짜, 팀이 같으면 동일 경기로 간주)
       const uniqueMatches = Array.from(new Map(allMatches.map(m => [`${m.tournament}-${m.date}-${m.teamA}-${m.teamB}`, m])).values());
       
-      // 상위 10개 경기에 대해 실제 선수 기록 추출 (조금 더 늘림)
-      const matchesToFetch = uniqueMatches.slice(0, 10);
+      // 상위 30개 경기에 대해 실제 선수 기록 추출 (조금 더 늘림)
+      const matchesToFetch = uniqueMatches.slice(0, 30);
       
       const historyWithStats = await Promise.all(matchesToFetch.map(async (m) => {
         try {
@@ -565,7 +565,16 @@ async function startServer() {
                     low: statsTds.length > 12 ? statsTds.eq(12).text().trim() : "-",
                     gs: `SV:${statsTds.eq(1).text().trim()}`,
                     as: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
-                    st: "0"
+                    tf: "0",
+                    bd: "0",
+                    bs: "0",
+                    st: "0",
+                    rb: "0",
+                    yc: statsTds.length > 13 ? statsTds.eq(13).text().trim() : "0",
+                    m2: statsTds.length > 14 ? statsTds.eq(14).text().trim() : "0",
+                    rc: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
+                    report: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                    playTime: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "00:60:00"
                   };
                 } else {
                   playerStats = {
@@ -588,7 +597,7 @@ async function startServer() {
                     m2: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
                     rc: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
                     report: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "0",
-                    playTime: statsTds.length > 18 ? statsTds.eq(18).text().trim() : "-"
+                    playTime: statsTds.length > 18 ? statsTds.eq(18).text().trim() : "00:60:00"
                   };
                 }
               }
@@ -623,7 +632,7 @@ async function startServer() {
             rc: playerStats ? (playerStats as any).rc : "0",
             report: playerStats ? (playerStats as any).report : "0",
             dr: playerStats ? (playerStats as any).report : "0",
-            playTime: playerStats ? (playerStats as any).playTime : "-"
+            playTime: playerStats ? (playerStats as any).playTime : "00:60:00"
           };
         } catch (e) {
           return {

@@ -137,7 +137,7 @@ export default async function handler(req: any, res: any) {
     });
     
     const uniqueMatches = Array.from(new Map(allMatches.map(m => [`${m.tournament}-${m.date}-${m.teamA}-${m.teamB}`, m])).values());
-    const matchesToFetch = uniqueMatches.slice(0, 10);
+    const matchesToFetch = uniqueMatches.slice(0, 30);
     
     const historyWithStats = await Promise.all(matchesToFetch.map(async (m) => {
       try {
@@ -173,7 +173,16 @@ export default async function handler(req: any, res: any) {
                   low: statsTds.length > 12 ? statsTds.eq(12).text().trim() : "-",
                   gs: `SV:${statsTds.eq(1).text().trim()}`,
                   as: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
-                  st: "0"
+                  tf: "0",
+                  bd: "0",
+                  bs: "0",
+                  st: "0",
+                  rb: "0",
+                  yc: statsTds.length > 13 ? statsTds.eq(13).text().trim() : "0",
+                  m2: statsTds.length > 14 ? statsTds.eq(14).text().trim() : "0",
+                  rc: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
+                  report: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                  playTime: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "00:60:00"
                 };
               } else {
                 playerStats = {
@@ -196,7 +205,7 @@ export default async function handler(req: any, res: any) {
                   m2: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
                   rc: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
                   report: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "0",
-                  playTime: statsTds.length > 18 ? statsTds.eq(18).text().trim() : "-"
+                  playTime: statsTds.length > 18 ? statsTds.eq(18).text().trim() : "00:60:00"
                 };
               }
             }
@@ -231,7 +240,7 @@ export default async function handler(req: any, res: any) {
           rc: playerStats ? (playerStats as any).rc : "0",
           report: playerStats ? (playerStats as any).report : "0",
           dr: playerStats ? (playerStats as any).report : "0",
-          playTime: playerStats ? (playerStats as any).playTime : "-"
+          playTime: playerStats ? (playerStats as any).playTime : "00:60:00"
         };
       } catch (e) {
         return {
