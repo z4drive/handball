@@ -1870,7 +1870,7 @@ export default function App() {
                             최근 경기실적 {playerPortalInfo?.recentMatchRecords && <span className="text-slate-400 font-normal">{playerPortalInfo.recentMatchRecords.length}건</span>}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
-                            행을 클릭하면 하단에 상세 대회명이 펼쳐집니다
+                            행을 클릭하면 하단에 상세 정보(대회명, 구분, 참가팀수, 포지션, 종목 등)가 슬라이드로 펼쳐집니다
                           </span>
                         </div>
                         <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
@@ -1878,12 +1878,8 @@ export default function App() {
                             <thead>
                               <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 font-bold">
                                 <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">대회기간</th>
-                                <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">구분</th>
-                                <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">장소</th>
-                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">참가팀수</th>
-                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">포지션</th>
-                                <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">종목</th>
-                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">순위</th>
+                                <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">장소</th>
+                                <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">순위</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 text-slate-700">
@@ -1895,37 +1891,63 @@ export default function App() {
                                       <tr 
                                         onClick={() => setExpandedRecentIndex(prev => prev === mIdx ? null : mIdx)}
                                         className={`hover:bg-slate-50 transition-colors cursor-pointer group ${isExpanded ? 'bg-indigo-50/40' : ''}`}
-                                        title="클릭하여 하단에 상세 대회명 펼치기"
+                                        title="클릭하여 하단에 상세 정보(대회명, 구분, 참가팀수, 포지션, 종목) 펼치기"
                                       >
-                                        <td className="border border-gray-200 px-3 py-2 text-[10px] font-medium text-slate-500 text-center">
-                                          <div className="flex items-center justify-center gap-1">
+                                        <td className="border border-gray-200 px-3 py-2.5 text-[10px] font-medium text-slate-500 text-center">
+                                          <div className="flex items-center justify-center gap-1.5">
                                             <span>{m.period}</span>
-                                            <span className="text-[9px] text-indigo-400">{isExpanded ? '▲' : '▼'}</span>
+                                            <span className="text-[9px] text-indigo-500 font-sans">{isExpanded ? '▲' : '▼'}</span>
                                           </div>
                                         </td>
-                                        <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-center">{m.type}</td>
-                                        <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.venue}</td>
-                                        <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.teamCount}</td>
-                                        <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-indigo-600 text-center">{m.position || '-'}</td>
-                                        <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.category}</td>
-                                        <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-emerald-600 text-center">{m.rank || '-'}</td>
+                                        <td className="border border-gray-200 px-3 py-2.5 text-[10px] text-slate-600 text-center">{m.venue || '-'}</td>
+                                        <td className="border border-gray-200 px-2.5 py-2.5 text-[10px] font-bold text-emerald-600 text-center">{m.rank || '-'}</td>
                                       </tr>
 
-                                      {/* 행 클릭 시 하단 슬라이드로 상세 대회명 표시 */}
+                                      {/* 행 클릭 시 하단 슬라이드로 삭제된 항목(대회명, 구분, 참가팀수, 포지션, 종목 등) 상세 표시 */}
                                       {isExpanded && (
                                         <tr className="bg-indigo-50/40 border-b-2 border-indigo-200 animate-in fade-in duration-200">
-                                          <td colSpan={7} className="p-3 text-left">
-                                            <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-1.5">
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
-                                                  대회명
-                                                </span>
-                                                <span className="text-xs font-bold text-slate-800">
-                                                  {m.tournament || "공식 대회"}
-                                                </span>
+                                          <td colSpan={3} className="p-3 text-left">
+                                            <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-2.5">
+                                              {/* 대회명 헤더 */}
+                                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-2">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-md">
+                                                    대회명
+                                                  </span>
+                                                  <span className="text-xs font-bold text-slate-800">
+                                                    {m.tournament || "공식 대회"}
+                                                  </span>
+                                                </div>
+                                                {m.type && (
+                                                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                                    {m.type}
+                                                  </span>
+                                                )}
                                               </div>
+
+                                              {/* 리스트에서 옮겨진 구분, 참가팀수, 포지션, 종목 카드 */}
+                                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5 text-[11px]">
+                                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                                  <span className="text-[9px] text-slate-400 font-bold block uppercase">구분</span>
+                                                  <span className="font-bold text-slate-700 mt-0.5 block">{m.type || '-'}</span>
+                                                </div>
+                                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                                  <span className="text-[9px] text-slate-400 font-bold block uppercase">참가팀수</span>
+                                                  <span className="font-bold text-slate-700 mt-0.5 block">{m.teamCount || '-'}</span>
+                                                </div>
+                                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                                  <span className="text-[9px] text-slate-400 font-bold block uppercase">포지션</span>
+                                                  <span className="font-bold text-indigo-600 mt-0.5 block">{m.position || '-'}</span>
+                                                </div>
+                                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                                  <span className="text-[9px] text-slate-400 font-bold block uppercase">종목</span>
+                                                  <span className="font-bold text-slate-700 mt-0.5 block">{m.category || '-'}</span>
+                                                </div>
+                                              </div>
+
+                                              {/* 추가 상세 정보 (경기방식, 출전여부, 비고) */}
                                               {(m.matchType || m.played || m.remark) && (
-                                                <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-gray-100 text-[10px] text-slate-500">
+                                                <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 text-[10px] text-slate-500">
                                                   {m.matchType && <span>경기방식: <strong className="text-slate-700 font-bold">{m.matchType}</strong></span>}
                                                   {m.played && <span>출전여부: <strong className="text-slate-700 font-bold">{m.played}</strong></span>}
                                                   {m.remark && <span>비고: <strong className="text-slate-700 font-bold">{m.remark}</strong></span>}
@@ -1940,7 +1962,7 @@ export default function App() {
                                 })
                               ) : (
                                 <tr>
-                                  <td colSpan={7} className="py-8 text-center text-xs text-gray-400">
+                                  <td colSpan={3} className="py-8 text-center text-xs text-gray-400">
                                     포털에 등록된 최근 경기실적이 없습니다.
                                   </td>
                                 </tr>
