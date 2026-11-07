@@ -107,6 +107,9 @@ export default function App() {
 
   const handleClosePlayer = () => {
     setExpandedCareerDate(null);
+    setExpandedRecentIndex(null);
+    setShowHexagonModal(false);
+    setSingleMatchHexagon(null);
     if (window.history.state?.modal === 'player') {
       window.history.back();
     } else {
@@ -144,8 +147,18 @@ export default function App() {
   // 역대기록 탭 날짜 클릭 시 바로 하단에 펼쳐지는 경기정보/점수 서브행 상태
   const [expandedCareerDate, setExpandedCareerDate] = useState<string | null>(null);
 
-  // 역대기록 탭 상단 헤더 '총 N경기 출전 통합' 클릭 시 6각형 기록 차트 모달 열림 상태
+  // 최근경기실적 탭 특정 행 클릭 시 대회명 하단 슬라이드 펼침 상태
+  const [expandedRecentIndex, setExpandedRecentIndex] = useState<number | null>(null);
+
+  // 역대기록 탭 상단 헤더 '차트보기' 클릭 시 6각형 기록 차트 새창 모달 열림 상태
   const [showHexagonModal, setShowHexagonModal] = useState<boolean>(false);
+
+  // 역대경기세부기록 리스트에서 특정 경기 기록 클릭 시 해당일에 해당하는 6각형 기록 분석차트 새창 상태
+  const [singleMatchHexagon, setSingleMatchHexagon] = useState<any | null>(null);
+
+  // 날짜 클릭 펼침 화면에서 '경기상세보기' 클릭 시 새창으로 열리는 경기상세 모달 상태
+  const [popupDetailMatch, setPopupDetailMatch] = useState<any | null>(null);
+  const [popupDetailLoading, setPopupDetailLoading] = useState<boolean>(false);
 
   // 학교명 뒤 축약 표시 함수 (대학교->대, 고등학교->고, 중학교->중, 초등학교->초)
   const formatSchoolName = (name?: string): string => {
@@ -494,7 +507,7 @@ export default function App() {
 
     return (
       <div 
-        className="fixed inset-0 z-[120] bg-transparent"
+        className="fixed inset-0 z-[150] bg-transparent"
         onClick={handleCloseTerm}
       >
         <div 
@@ -805,33 +818,32 @@ export default function App() {
     return (
       <AnimatePresence>
         {showHexagonModal && (
-          <motion.div 
-            initial={{ opacity: 0, height: 0, scale: 0.96 }}
-            animate={{ opacity: 1, height: 'auto', scale: 1 }}
-            exit={{ opacity: 0, height: 0, scale: 0.96 }}
-            transition={{ duration: 0.35, ease: "easeInOut" }}
-            className="overflow-hidden"
+          <div 
+            className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+            onClick={() => setShowHexagonModal(false)}
           >
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-indigo-100 space-y-4">
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full max-w-sm rounded-[32px] p-5 shadow-2xl border border-indigo-100 space-y-4 animate-in zoom-in-95 duration-200"
+            >
               {/* Header */}
-              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
-                  <span className="text-xs font-black text-slate-800 tracking-tight">
-                    {selectedPlayer} 6각형 역대 기록 분석 차트
+                  <span className="text-sm font-black text-slate-800 tracking-tight">
+                    {selectedPlayer} 6각형 통산 기록 분석 차트
                   </span>
                   <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                    {isCurrentPlayerGoalie ? 'GK 포지션별 방어율' : '포지션별 성공률'}
+                    {isCurrentPlayerGoalie ? 'GK 방어율' : '슈팅 성공률'}
                   </span>
                 </div>
                 <button 
                   type="button"
                   onClick={() => setShowHexagonModal(false)}
-                  className="text-[11px] font-bold text-slate-400 hover:text-slate-700 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-full transition-colors flex items-center gap-1 cursor-pointer"
-                  title="차트 접기"
+                  className="p-2 rounded-full hover:bg-gray-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title="닫기"
                 >
-                  <span>접기</span>
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -891,10 +903,7 @@ export default function App() {
                   })}
 
                   {/* 3. 선수의 실제 데이터 6각형 다각형 영역 (동적 애니메이션) */}
-                  <motion.polygon 
-                    initial={{ opacity: 0, scale: 0.3 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.6, ease: "easeOut" }}
+                  <polygon 
                     points={polygonPoints}
                     fill="url(#radarIndigoGradient)"
                     stroke="#4F46E5"
@@ -903,7 +912,7 @@ export default function App() {
                     className="transition-all duration-300"
                   />
 
-                  {/* 4. 꼭짓점 원형 포인트 마커 및 수치 뱃지 */}
+                  {/* 4. 꼭짓점 원형 포인트 마커 및 수치 뱃지 (용어 클릭 시 설명 새창 열림) */}
                   {statsSummary.map((item, idx) => {
                     const angle = angles[idx];
                     const radius = R * Math.max(0.18, item.ratio);
@@ -921,7 +930,14 @@ export default function App() {
                     else if (Math.cos(angle) < -0.3) textAnchor = "end";
 
                     return (
-                      <g key={idx}>
+                      <g 
+                        key={idx}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenTerm(item.label, e);
+                        }}
+                        className="cursor-pointer group"
+                      >
                         {/* 데이터 포인트 원 */}
                         <circle 
                           cx={px} 
@@ -933,12 +949,12 @@ export default function App() {
                           className="filter drop-shadow-xs"
                         />
                         
-                        {/* 축 라벨 및 성공률/방어율 */}
+                        {/* 축 라벨 및 성공률/방어율 (클릭 시 용어설명 작은 새창 팝업) */}
                         <text 
                           x={lx} 
                           y={ly - 4}
                           textAnchor={textAnchor}
-                          className="text-[11px] font-black fill-slate-800"
+                          className="text-[11px] font-black fill-slate-800 group-hover:fill-indigo-600 transition-colors cursor-pointer select-none"
                         >
                           {item.label}
                         </text>
@@ -946,7 +962,7 @@ export default function App() {
                           x={lx} 
                           y={ly + 8}
                           textAnchor={textAnchor}
-                          className="text-[10px] font-bold fill-indigo-600 font-mono"
+                          className="text-[10px] font-bold fill-indigo-600 font-mono group-hover:fill-indigo-700 transition-colors cursor-pointer select-none"
                         >
                           {item.rate}%
                         </text>
@@ -956,30 +972,439 @@ export default function App() {
                 </svg>
               </div>
 
-              {/* Bottom Summary List (첨부 이미지 스타일 스케치북 메모 요약) */}
-              <div className="bg-slate-50 rounded-2xl p-4 border border-gray-100 space-y-2 text-left">
-                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest pb-1 border-b border-gray-200/80 flex items-center justify-between">
-                  <span>{isCurrentPlayerGoalie ? '포지션별 방어 실적 상세' : '포지션별 슈팅 성공률 상세'}</span>
-                  <span className="text-indigo-600 font-bold">{axes.join(' · ')}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-1">
-                  {statsSummary.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs py-0.5">
-                      <span className="font-bold text-slate-600 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                        <span>{item.label}</span>
-                      </span>
-                      <span className="font-mono font-black text-slate-800">
-                        {item.detail}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              {/* 하단 설명 안내: 하단 표는 삭제하고, 용어 클릭 안내 제공 */}
+              <div className="text-[10px] text-center text-slate-400 font-medium pt-2 border-t border-gray-100">
+                용어(6m, Wing, 9m 등)를 클릭하면 작은 새창으로 용어 설명이 표시됩니다
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
+    );
+  };
+
+  // 역대경기세부기록 리스트에서 특정 경기 기록 클릭 시 해당일에 해당하는 6각형 기록 분석차트 새창 모달
+  const renderSingleMatchHexagonModal = () => {
+    if (!singleMatchHexagon || !singleMatchHexagon.match) return null;
+
+    const { match, isGoalie } = singleMatchHexagon;
+    const matchDate = (match.cleanDate || match.date || "").split(' ')[0] || "-";
+
+    // 6가지 축 라벨
+    const axes = isGoalie 
+      ? ['Wing', '6m', '9m', '7m', 'FB', 'BT']
+      : ['6m', 'Wing', '9m', '7m', 'FB', 'BT'];
+
+    const statsSummary = axes.map((axisKey) => {
+      let valStr = "";
+      if (axisKey === '6m') valStr = match.m6 || "";
+      else if (axisKey === 'Wing') valStr = match.wing || "";
+      else if (axisKey === '9m') valStr = match.m9 || "";
+      else if (axisKey === '7m') valStr = match.m7 || "";
+      else if (axisKey === 'FB') valStr = match.fb || "";
+      else if (axisKey === 'BT') valStr = match.bt || "";
+
+      if (isGoalie) {
+        let rate = 0;
+        if (valStr && valStr.includes('/')) {
+          const parts = valStr.split('/');
+          const sv = parseInt(parts[0]) || 0;
+          const sh = parseInt(parts[1]) || 0;
+          rate = sh > 0 ? Math.round((sv / sh) * 1000) / 10 : 0;
+        } else {
+          const num = parseFloat((valStr || '').replace('%', ''));
+          rate = !isNaN(num) && num >= 0 ? num : 0;
+        }
+        return {
+          key: axisKey,
+          label: axisKey,
+          rate,
+          detail: `${rate}%`,
+          ratio: Math.min(100, Math.max(12, rate)) / 100,
+        };
+      } else {
+        let scored = 0;
+        let attempted = 0;
+        if (valStr && valStr.includes('/')) {
+          const parts = valStr.split('/');
+          scored = parseInt(parts[0]) || 0;
+          attempted = parseInt(parts[1]) || 0;
+        }
+        const rate = attempted > 0 ? Math.round((scored / attempted) * 1000) / 10 : 0;
+        return {
+          key: axisKey,
+          label: axisKey,
+          scored,
+          attempted,
+          rate,
+          detail: attempted > 0 ? `${scored}/${attempted} (${rate}%)` : '0/0 (0%)',
+          ratio: Math.min(100, Math.max(12, rate)) / 100,
+        };
+      }
+    });
+
+    // 6각형 기하학적 파라미터
+    const cx = 150;
+    const cy = 145;
+    const R = 85;
+
+    const angles = [
+      -Math.PI / 2,             // 12시 (상)
+      -Math.PI / 6,             // 2시 (우상)
+      Math.PI / 6,              // 4시 (우하)
+      Math.PI / 2,              // 6시 (하)
+      (5 * Math.PI) / 6,        // 8시 (좌하)
+      (-5 * Math.PI) / 6,       // 10시 (좌상)
+    ];
+
+    const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
+
+    const polygonPoints = statsSummary.map((item, idx) => {
+      const angle = angles[idx];
+      const radius = R * Math.max(0.15, item.ratio);
+      const px = cx + radius * Math.cos(angle);
+      const py = cy + radius * Math.sin(angle);
+      return `${px.toFixed(1)},${py.toFixed(1)}`;
+    }).join(' ');
+
+    const scoreParts = (match.score || "0:0").split(":");
+
+    return (
+      <div 
+        className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+        onClick={() => setSingleMatchHexagon(null)}
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white w-full max-w-sm rounded-[32px] p-5 shadow-2xl border border-indigo-100 space-y-4 animate-in zoom-in-95 duration-200"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
+                <h3 className="text-sm font-black text-slate-800">
+                  {matchDate} 6각형 기록 분석차트
+                </h3>
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                {match.tournament || "공식 전국대회"}
+              </div>
+            </div>
+            <button 
+              onClick={() => setSingleMatchHexagon(null)}
+              className="p-2 rounded-full hover:bg-gray-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              title="닫기"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Match Score Strip */}
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-2xl border border-slate-100">
+            <span className="text-xs font-black text-slate-800 truncate max-w-[100px]">{formatSchoolName(match.teamA)}</span>
+            <span className="text-xs font-black text-indigo-600 bg-white px-2.5 py-0.5 rounded-full shadow-2xs border border-indigo-50">
+              {scoreParts[0]?.trim() || '0'} : {scoreParts[1]?.trim() || '0'}
+            </span>
+            <span className="text-xs font-black text-slate-800 truncate max-w-[100px] text-right">{formatSchoolName(match.teamB)}</span>
+          </div>
+
+          {/* Hexagon Chart */}
+          <div className="relative flex flex-col items-center justify-center py-1">
+            <svg 
+              viewBox="0 0 300 290" 
+              className="w-full max-w-[260px] h-auto overflow-visible select-none"
+            >
+              <defs>
+                <radialGradient id="singleRadarGradient" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#818CF8" stopOpacity="0.8" />
+                  <stop offset="70%" stopColor="#6366F1" stopOpacity="0.5" />
+                  <stop offset="100%" stopColor="#4F46E5" stopOpacity="0.25" />
+                </radialGradient>
+              </defs>
+
+              {/* Grid concentric hexagons */}
+              {gridLevels.map((lvl, lIdx) => {
+                const pts = angles.map((ang) => {
+                  const px = cx + (R * lvl) * Math.cos(ang);
+                  const py = cy + (R * lvl) * Math.sin(ang);
+                  return `${px.toFixed(1)},${py.toFixed(1)}`;
+                }).join(' ');
+                return (
+                  <polygon
+                    key={lIdx}
+                    points={pts}
+                    fill="none"
+                    stroke={lIdx === gridLevels.length - 1 ? "#6366F1" : "#E2E8F0"}
+                    strokeWidth={lIdx === gridLevels.length - 1 ? "1.5" : "1"}
+                    strokeDasharray={lIdx === gridLevels.length - 1 ? "none" : "3,3"}
+                    opacity={lIdx === gridLevels.length - 1 ? 0.7 : 0.9}
+                  />
+                );
+              })}
+
+              {/* Axis lines */}
+              {angles.map((ang, aIdx) => {
+                const px = cx + R * Math.cos(ang);
+                const py = cy + R * Math.sin(ang);
+                return (
+                  <line
+                    key={aIdx}
+                    x1={cx}
+                    y1={cy}
+                    x2={px}
+                    y2={py}
+                    stroke="#CBD5E1"
+                    strokeWidth="1"
+                    strokeDasharray="2,2"
+                  />
+                );
+              })}
+
+              {/* Player Data Polygon */}
+              <polygon
+                points={polygonPoints}
+                fill="url(#singleRadarGradient)"
+                stroke="#4F46E5"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+              />
+
+              {/* Points on polygon */}
+              {statsSummary.map((item, idx) => {
+                const ang = angles[idx];
+                const radius = R * Math.max(0.15, item.ratio);
+                const px = cx + radius * Math.cos(ang);
+                const py = cy + radius * Math.sin(ang);
+                return (
+                  <circle
+                    key={idx}
+                    cx={px}
+                    cy={py}
+                    r="4"
+                    fill="#4338CA"
+                    stroke="#FFFFFF"
+                    strokeWidth="2"
+                  />
+                );
+              })}
+
+              {/* Axis Labels (용어명 클릭 시 설명 새창 열림) */}
+              {statsSummary.map((item, idx) => {
+                const ang = angles[idx];
+                const labelDist = R + 24;
+                const lx = cx + labelDist * Math.cos(ang);
+                const ly = cy + labelDist * Math.sin(ang);
+                return (
+                  <g 
+                    key={idx} 
+                    transform={`translate(${lx}, ${ly})`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenTerm(item.label, e);
+                    }}
+                    className="cursor-pointer group"
+                  >
+                    <text
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      className="text-[11px] font-black fill-slate-800 group-hover:fill-indigo-600 transition-colors cursor-pointer select-none"
+                    >
+                      {item.label}
+                    </text>
+                    <text
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      y="12"
+                      className="text-[9.5px] font-bold fill-indigo-600 font-mono group-hover:fill-indigo-700 transition-colors cursor-pointer select-none"
+                    >
+                      {item.detail}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* 하단 설명 안내: 하단 표는 삭제하고 용어 클릭 안내 제공 */}
+          <div className="text-[10px] text-center text-slate-400 font-medium pt-2 border-t border-gray-100">
+            용어(6m, Wing, 9m 등)를 클릭하면 작은 새창으로 용어 설명이 표시됩니다
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // 날짜 펼침에서 '경기상세보기' 클릭 시 새창으로 열리는 경기상세 모달
+  const handleOpenPopupDetail = async (url: string) => {
+    if (!url) return;
+    setPopupDetailLoading(true);
+    setPopupDetailMatch(null);
+
+    // 1. 캐시 확인
+    const cacheKey = `match_detail_v2_${url}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        setPopupDetailMatch(JSON.parse(cached));
+        setPopupDetailLoading(false);
+        return;
+      } catch (e) {}
+    }
+
+    // 2. API 조회
+    try {
+      const response = await axios.get(`/api/match-detail?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+      const detailWithUrl = { ...response.data, url };
+      setPopupDetailMatch(detailWithUrl);
+      localStorage.setItem(cacheKey, JSON.stringify(detailWithUrl));
+      setPopupDetailLoading(false);
+      return;
+    } catch (e) {
+      console.warn("API popup match-detail failed, trying static KHF DB:", e);
+    }
+
+    // 3. 정적 DB 조회 (GitHub Pages 호환)
+    const staticDb = await loadStaticKhfDb();
+    const staticMatch = staticDb?.matchRecords?.[url];
+    if (staticMatch) {
+      const fallbackDetail = {
+        url,
+        tournament: staticMatch.tournament || '대한핸드볼협회 공식대회',
+        matchInfo: staticMatch.fullDate || staticMatch.date || '',
+        homeTeam: staticMatch.teamA || '',
+        awayTeam: staticMatch.teamB || '',
+        totalScore: staticMatch.score || 'VS',
+        periodScores: [],
+        homeIcons: {},
+        awayIcons: {},
+        tableStats: [],
+        playerRecords: staticMatch.playerRecords || { home: [], away: [] },
+        compareBars: [],
+        group: staticMatch.group || ''
+      };
+      setPopupDetailMatch(fallbackDetail);
+      localStorage.setItem(cacheKey, JSON.stringify(fallbackDetail));
+    }
+    setPopupDetailLoading(false);
+  };
+
+  const renderPopupDetailModal = () => {
+    if (!popupDetailMatch && !popupDetailLoading) return null;
+
+    const scoreParts = (popupDetailMatch?.totalScore || "0:0").split(":");
+    const scoreA = parseInt(scoreParts[0]) || 0;
+    const scoreB = parseInt(scoreParts[1]) || 0;
+
+    return (
+      <div 
+        className="fixed inset-0 z-[140] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+        onClick={() => setPopupDetailMatch(null)}
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white w-full max-w-xl rounded-t-[36px] sm:rounded-[36px] h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-200"
+        >
+          {/* Header */}
+          <div className="p-5 sm:p-6 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex-1 min-w-0 pr-2">
+              <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+                {popupDetailMatch?.tournament || "경기 결과 상세"}
+              </span>
+              <h3 className="text-base font-black text-slate-800 truncate mt-1">
+                경기 결과 상세 새창
+              </h3>
+            </div>
+            <button 
+              onClick={() => setPopupDetailMatch(null)}
+              className="p-2.5 rounded-full hover:bg-gray-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              title="닫기"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            {popupDetailLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-xs font-bold text-slate-400">경기 세부기록 불러오는 중...</p>
+              </div>
+            ) : popupDetailMatch ? (
+              <div className="space-y-4">
+                {/* Scoreboard */}
+                <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 text-center space-y-2">
+                  <div className="text-[11px] font-bold text-slate-400 font-mono">
+                    {popupDetailMatch.matchInfo}
+                  </div>
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="flex-1 text-right font-black text-sm text-slate-800">
+                      {formatSchoolName(popupDetailMatch.homeTeam)}
+                    </div>
+                    <div className="px-3 py-1 bg-slate-900 text-white rounded-xl font-black text-lg">
+                      <span className={scoreA > scoreB ? 'text-red-400' : 'text-white'}>{scoreParts[0]?.trim() || '0'}</span>
+                      <span className="mx-1 text-slate-500">:</span>
+                      <span className={scoreB > scoreA ? 'text-red-400' : 'text-white'}>{scoreParts[1]?.trim() || '0'}</span>
+                    </div>
+                    <div className="flex-1 text-left font-black text-sm text-slate-800">
+                      {formatSchoolName(popupDetailMatch.awayTeam)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Player records table */}
+                <div className="space-y-2">
+                  <span className="text-xs font-black text-slate-800 px-1">선수별 세부 기록</span>
+                  <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
+                    <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 font-bold text-[11px]">
+                          <th className="border border-gray-200 px-3 py-2">팀</th>
+                          <th className="border border-gray-200 px-3 py-2">선수명</th>
+                          <th className="border border-gray-200 px-3 py-2">G/S</th>
+                          <th className="border border-gray-200 px-3 py-2">성공률</th>
+                          <th className="border border-gray-200 px-3 py-2">6m</th>
+                          <th className="border border-gray-200 px-3 py-2">Wing</th>
+                          <th className="border border-gray-200 px-3 py-2">9m</th>
+                          <th className="border border-gray-200 px-3 py-2">7m</th>
+                          <th className="border border-gray-200 px-3 py-2">FB</th>
+                          <th className="border border-gray-200 px-3 py-2">BT</th>
+                          <th className="border border-gray-200 px-3 py-2">AS</th>
+                          <th className="border border-gray-200 px-3 py-2">ST</th>
+                          <th className="border border-gray-200 px-3 py-2">RB</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 text-slate-700">
+                        {[
+                          ...(popupDetailMatch.playerRecords?.home || []).map((p: any) => ({ ...p, teamSide: popupDetailMatch.homeTeam })),
+                          ...(popupDetailMatch.playerRecords?.away || []).map((p: any) => ({ ...p, teamSide: popupDetailMatch.awayTeam }))
+                        ].map((p: any, pIdx: number) => (
+                          <tr key={pIdx} className="hover:bg-slate-50">
+                            <td className="border border-gray-200 px-2 py-1.5 text-[10px] font-bold text-slate-500">{formatSchoolName(p.teamSide)}</td>
+                            <td className="border border-gray-200 px-3 py-1.5 font-black text-slate-800">{p.name}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 font-bold text-indigo-600">{p.gs || `${p.goals || 0}/${p.shots || 0}`}</td>
+                            <td className="border border-gray-200 px-2 py-1.5">{p.rate ? (p.rate.includes('%') ? p.rate : `${p.rate}%`) : '-'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-500">{p.m6 || '0/0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-500">{p.wing || '0/0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-500">{p.m9 || '0/0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-500">{p.m7 || '0/0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-500">{p.fb || '0/0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-500">{p.bt || '0/0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 font-bold text-slate-700">{p.as || '0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-700">{p.st || '0'}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 text-slate-700">{p.rb || '0'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -1440,9 +1865,12 @@ export default function App() {
                     <div className="space-y-4">
                       {/* 최근 경기실적 테이블 (스포츠지원포털 경기실적 - 이미지 1과 일치) */}
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between px-1">
+                        <div className="flex flex-wrap items-center justify-between gap-1 px-1">
                           <span className="text-xs font-black text-slate-700 tracking-tight">
                             최근 경기실적 {playerPortalInfo?.recentMatchRecords && <span className="text-slate-400 font-normal">{playerPortalInfo.recentMatchRecords.length}건</span>}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            행을 클릭하면 하단에 상세 대회명이 펼쳐집니다
                           </span>
                         </div>
                         <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
@@ -1451,37 +1879,68 @@ export default function App() {
                               <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 font-bold">
                                 <th className="border border-gray-200 px-3 py-2 text-center text-[10px]">대회기간</th>
                                 <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">구분</th>
-                                <th className="border border-gray-200 px-3 py-2 text-left text-[10px]">대회명</th>
                                 <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">장소</th>
                                 <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">참가팀수</th>
-                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">경기방식</th>
-                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">출전유무</th>
                                 <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">포지션</th>
                                 <th className="border border-gray-200 px-2.5 py-2 text-center text-[10px]">종목</th>
                                 <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">순위</th>
-                                <th className="border border-gray-200 px-2 py-2 text-center text-[10px]">비고</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 text-slate-700">
                               {playerPortalInfo?.recentMatchRecords && playerPortalInfo.recentMatchRecords.length > 0 ? (
-                                playerPortalInfo.recentMatchRecords.map((m: any, mIdx: number) => (
-                                  <tr key={mIdx} className="hover:bg-slate-50 transition-colors">
-                                    <td className="border border-gray-200 px-3 py-2 text-[10px] font-medium text-slate-500 text-center">{m.period}</td>
-                                    <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-center">{m.type}</td>
-                                    <td className="border border-gray-200 px-3 py-2 text-xs font-bold text-slate-800 text-left">{m.tournament}</td>
-                                    <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.venue}</td>
-                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.teamCount}</td>
-                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.matchType || '-'}</td>
-                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.played || '-'}</td>
-                                    <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-indigo-600 text-center">{m.position || '-'}</td>
-                                    <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.category}</td>
-                                    <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-emerald-600 text-center">{m.rank || '-'}</td>
-                                    <td className="border border-gray-200 px-2 py-2 text-[10px] text-slate-400 text-center">{m.remark || '-'}</td>
-                                  </tr>
-                                ))
+                                playerPortalInfo.recentMatchRecords.map((m: any, mIdx: number) => {
+                                  const isExpanded = expandedRecentIndex === mIdx;
+                                  return (
+                                    <React.Fragment key={mIdx}>
+                                      <tr 
+                                        onClick={() => setExpandedRecentIndex(prev => prev === mIdx ? null : mIdx)}
+                                        className={`hover:bg-slate-50 transition-colors cursor-pointer group ${isExpanded ? 'bg-indigo-50/40' : ''}`}
+                                        title="클릭하여 하단에 상세 대회명 펼치기"
+                                      >
+                                        <td className="border border-gray-200 px-3 py-2 text-[10px] font-medium text-slate-500 text-center">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <span>{m.period}</span>
+                                            <span className="text-[9px] text-indigo-400">{isExpanded ? '▲' : '▼'}</span>
+                                          </div>
+                                        </td>
+                                        <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-center">{m.type}</td>
+                                        <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.venue}</td>
+                                        <td className="border border-gray-200 px-2 py-2 text-[10px] text-center">{m.teamCount}</td>
+                                        <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-indigo-600 text-center">{m.position || '-'}</td>
+                                        <td className="border border-gray-200 px-2.5 py-2 text-[10px] text-slate-600 text-center">{m.category}</td>
+                                        <td className="border border-gray-200 px-2 py-2 text-[10px] font-bold text-emerald-600 text-center">{m.rank || '-'}</td>
+                                      </tr>
+
+                                      {/* 행 클릭 시 하단 슬라이드로 상세 대회명 표시 */}
+                                      {isExpanded && (
+                                        <tr className="bg-indigo-50/40 border-b-2 border-indigo-200 animate-in fade-in duration-200">
+                                          <td colSpan={7} className="p-3 text-left">
+                                            <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-1.5">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                                                  대회명
+                                                </span>
+                                                <span className="text-xs font-bold text-slate-800">
+                                                  {m.tournament || "공식 대회"}
+                                                </span>
+                                              </div>
+                                              {(m.matchType || m.played || m.remark) && (
+                                                <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-gray-100 text-[10px] text-slate-500">
+                                                  {m.matchType && <span>경기방식: <strong className="text-slate-700 font-bold">{m.matchType}</strong></span>}
+                                                  {m.played && <span>출전여부: <strong className="text-slate-700 font-bold">{m.played}</strong></span>}
+                                                  {m.remark && <span>비고: <strong className="text-slate-700 font-bold">{m.remark}</strong></span>}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })
                               ) : (
                                 <tr>
-                                  <td colSpan={11} className="py-8 text-center text-xs text-gray-400">
+                                  <td colSpan={7} className="py-8 text-center text-xs text-gray-400">
                                     포털에 등록된 최근 경기실적이 없습니다.
                                   </td>
                                 </tr>
@@ -1651,43 +2110,50 @@ export default function App() {
                       const avgRate = rateCount > 0 ? (rateSum / rateCount).toFixed(1) : (matchesToShow[0]?.rate?.replace('%', '') || "0");
 
                       return (
-                        <div className="bg-slate-900 text-white rounded-3xl p-5 space-y-4 shadow-lg">
-                          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                            <span className="text-xs font-black tracking-wider text-slate-300">
-                              {selectedPlayer} 골키퍼(GK) 역대 통산 기록 요약
-                            </span>
+                        <div className="bg-slate-900 text-white rounded-3xl p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-lg">
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
+                            <div>
+                              <span className="text-xs font-black tracking-wider text-slate-300 block">
+                                골키퍼(GK) 역대 통산 기록 요약
+                              </span>
+                              <span className="text-[10px] text-indigo-300/80 font-medium">
+                                '차트보기'를 클릭하면 통산 6각형 상세 분석차트가 새창으로 열립니다
+                              </span>
+                            </div>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                setShowHexagonModal(prev => !prev);
+                                setShowHexagonModal(true);
                               }}
                               className="text-[10px] font-bold text-indigo-300 bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-700/60 px-2.5 py-1 rounded-full cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-xs"
-                              title="클릭하여 6각형 기록 분석 차트 토글"
+                              title="클릭하여 6각형 상세 분석차트 새창 열기"
                             >
-                              <span>총 {totalMatches}경기 출전 통합</span>
-                              <span className="text-[9px] bg-indigo-600/80 text-white px-1.5 py-0.2 rounded font-black">
-                                {showHexagonModal ? '⬡ 접기 ▲' : '⬡ 차트보기 ▼'}
+                              <span>총 {totalMatches}경기 출전</span>
+                              <span className="text-[9px] bg-indigo-600 text-white px-1.5 py-0.5 rounded font-black flex items-center gap-0.5">
+                                <span>⬡ 차트보기</span>
+                                <span className="text-[8px]">↗</span>
                               </span>
                             </button>
                           </div>
-                          <div className="grid grid-cols-4 gap-2 text-center">
-                            <div className="bg-slate-800/80 p-3 rounded-2xl">
-                              <div className="text-[9px] text-slate-400 font-bold uppercase">평균 방어율</div>
-                              <div className="text-base font-black text-emerald-400 mt-0.5">{avgRate}%</div>
+                          {/* 모바일 1줄 고정 4개 지표 카드 */}
+                          <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5 text-center w-full">
+                            <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                              <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">평균 방어율</div>
+                              <div className="text-xs sm:text-base font-black text-emerald-400 mt-0.5 whitespace-nowrap">{avgRate}%</div>
                             </div>
-                            <div className="bg-slate-800/80 p-3 rounded-2xl">
-                              <div className="text-[9px] text-slate-400 font-bold uppercase">통산 세이브(SV)</div>
-                              <div className="text-base font-black text-white mt-0.5">{totalSv}회</div>
+                            <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                              <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">통산 세이브(SV)</div>
+                              <div className="text-xs sm:text-base font-black text-white mt-0.5 whitespace-nowrap">{totalSv}회</div>
                             </div>
-                            <div className="bg-slate-800/80 p-3 rounded-2xl">
-                              <div className="text-[9px] text-slate-400 font-bold uppercase">GK 득점</div>
-                              <div className="text-base font-black text-white mt-0.5">{totalGkg}골</div>
+                            <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                              <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">GK 득점</div>
+                              <div className="text-xs sm:text-base font-black text-white mt-0.5 whitespace-nowrap">{totalGkg}골</div>
                             </div>
-                            <div className="bg-slate-800/80 p-3 rounded-2xl">
-                              <div className="text-[9px] text-slate-400 font-bold uppercase">GK 어시스트</div>
-                              <div className="text-base font-black text-indigo-400 mt-0.5">{totalGkas}회</div>
+                            <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                              <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">GK 어시스트</div>
+                              <div className="text-xs sm:text-base font-black text-indigo-400 mt-0.5 whitespace-nowrap">{totalGkas}회</div>
                             </div>
                           </div>
                         </div>
@@ -1712,43 +2178,50 @@ export default function App() {
                     const careerRate = totalShots > 0 ? Math.round((totalGoals / totalShots) * 100) : 0;
 
                     return (
-                      <div className="bg-slate-900 text-white rounded-3xl p-5 space-y-4 shadow-lg">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                          <span className="text-xs font-black tracking-wider text-slate-300">
-                            {selectedPlayer} 역대 통산 기록 요약
-                          </span>
+                      <div className="bg-slate-900 text-white rounded-3xl p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-lg">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
+                          <div>
+                            <span className="text-xs font-black tracking-wider text-slate-300 block">
+                              역대 통산 기록 요약
+                            </span>
+                            <span className="text-[10px] text-indigo-300/80 font-medium">
+                              '차트보기'를 클릭하면 통산 6각형 상세 분석차트가 새창으로 열립니다
+                            </span>
+                          </div>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              setShowHexagonModal(prev => !prev);
+                              setShowHexagonModal(true);
                             }}
                             className="text-[10px] font-bold text-indigo-300 bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-700/60 px-2.5 py-1 rounded-full cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-xs"
-                            title="클릭하여 6각형 기록 분석 차트 토글"
+                            title="클릭하여 6각형 상세 분석차트 새창 열기"
                           >
-                            <span>총 {totalMatches}경기 출전 통합</span>
-                            <span className="text-[9px] bg-indigo-600/80 text-white px-1.5 py-0.2 rounded font-black">
-                              {showHexagonModal ? '⬡ 접기 ▲' : '⬡ 차트보기 ▼'}
+                            <span>총 {totalMatches}경기 출전</span>
+                            <span className="text-[9px] bg-indigo-600 text-white px-1.5 py-0.5 rounded font-black flex items-center gap-0.5">
+                              <span>⬡ 차트보기</span>
+                              <span className="text-[8px]">↗</span>
                             </span>
                           </button>
                         </div>
-                        <div className="grid grid-cols-4 gap-2 text-center">
-                          <div className="bg-slate-800/80 p-3 rounded-2xl">
-                            <div className="text-[9px] text-slate-400 font-bold uppercase">통산 득점</div>
-                            <div className="text-base font-black text-white mt-0.5">{totalGoals}골</div>
+                        {/* 모바일 1줄 고정 4개 지표 카드 */}
+                        <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5 text-center w-full">
+                          <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                            <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">통산 득점</div>
+                            <div className="text-xs sm:text-base font-black text-white mt-0.5 whitespace-nowrap">{totalGoals}골</div>
                           </div>
-                          <div className="bg-slate-800/80 p-3 rounded-2xl">
-                            <div className="text-[9px] text-slate-400 font-bold uppercase">슈팅 시도</div>
-                            <div className="text-base font-black text-white mt-0.5">{totalShots}회</div>
+                          <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                            <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">슈팅 시도</div>
+                            <div className="text-xs sm:text-base font-black text-white mt-0.5 whitespace-nowrap">{totalShots}회</div>
                           </div>
-                          <div className="bg-slate-800/80 p-3 rounded-2xl">
-                            <div className="text-[9px] text-slate-400 font-bold uppercase">성공률</div>
-                            <div className="text-base font-black text-emerald-400 mt-0.5">{careerRate}%</div>
+                          <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                            <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">성공률</div>
+                            <div className="text-xs sm:text-base font-black text-emerald-400 mt-0.5 whitespace-nowrap">{careerRate}%</div>
                           </div>
-                          <div className="bg-slate-800/80 p-3 rounded-2xl">
-                            <div className="text-[9px] text-slate-400 font-bold uppercase">어시스트</div>
-                            <div className="text-base font-black text-indigo-400 mt-0.5">{totalAs}회</div>
+                          <div className="bg-slate-800/80 py-2 px-1 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col justify-center min-w-0">
+                            <div className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-bold uppercase truncate tracking-tighter sm:tracking-normal">어시스트</div>
+                            <div className="text-xs sm:text-base font-black text-indigo-400 mt-0.5 whitespace-nowrap">{totalAs}회</div>
                           </div>
                         </div>
                       </div>
@@ -1768,7 +2241,7 @@ export default function App() {
 
                     return (
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between px-1">
+                        <div className="flex flex-wrap items-center justify-between gap-1 px-1">
                           <span className="text-xs font-black text-slate-800 tracking-tight flex items-center gap-1.5">
                             <span>{isCurrentPlayerGoalie ? '골키퍼(GK) 역대 경기 세부기록' : '역대 경기 세부기록'}</span>
                             <span className="text-slate-400 font-normal">
@@ -1776,7 +2249,7 @@ export default function App() {
                             </span>
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
-                            날짜를 클릭하면 바로 하단에 대회정보와 최종점수가 펼쳐집니다
+                            날짜를 클릭하면 하단에 점수가 표시되며, 기록을 클릭하면 6각형 차트가 새창으로 열립니다
                           </span>
                         </div>
 
@@ -1859,6 +2332,10 @@ export default function App() {
                                     const scoreA = parseInt(scoreParts[0]) || 0;
                                     const scoreB = parseInt(scoreParts[1]) || 0;
 
+                                    const onRowRecordClick = () => {
+                                      setSingleMatchHexagon({ match: h, isGoalie: true });
+                                    };
+
                                     return (
                                       <React.Fragment key={i}>
                                         <tr className={`hover:bg-slate-50 transition-colors group ${isExpanded ? 'bg-indigo-50/30' : ''}`}>
@@ -1873,66 +2350,77 @@ export default function App() {
                                               <span className="text-[9px] text-indigo-400 font-sans">{isExpanded ? '▲' : '▼'}</span>
                                             </div>
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800">{saveRate}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-bold text-emerald-600">{svCount}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.gkg || '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.gkas || h.as || '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.wing || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m6 || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m9 || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m7 || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.fb || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bt || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.high || '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.mid || '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.low || '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                          {/* 기록 셀들: 클릭 시 해당일 6각형 기록 분석차트 새창 모달 오픈 */}
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800 cursor-pointer hover:bg-indigo-50/70 transition-colors">{saveRate}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-bold text-emerald-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{svCount}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.gkg || '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.gkas || h.as || '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.wing || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.m6 || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.m9 || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.m7 || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.fb || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.bt || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.high || '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.mid || '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.low || '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-center cursor-pointer hover:bg-indigo-50/70 transition-colors">
                                             {h.yc !== '0' && h.yc ? <span className="w-4 h-4 bg-yellow-400 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.yc}</span> : '0'}
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-center cursor-pointer hover:bg-indigo-50/70 transition-colors">
                                             {h.m2 !== '0' && h.m2 ? <span className="w-4 h-4 bg-indigo-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.m2}</span> : '0'}
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-center cursor-pointer hover:bg-indigo-50/70 transition-colors">
                                             {h.rc !== '0' && h.rc ? <span className="w-4 h-4 bg-red-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.rc}</span> : '0'}
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-slate-500">{h.report || h.dr || '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500">{h.playTime || '00:60:00'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-slate-500 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.report || h.dr || '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.playTime || '00:60:00'}</td>
                                         </tr>
 
-                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 상대팀과의 대회정보 및 최종점수 화면 */}
+                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 대회정보 밑에 점수 표시 및 경기상세보기 새창 버튼 */}
                                         {isExpanded && (
                                           <tr className="bg-indigo-50/50 border-b-2 border-indigo-200 animate-in fade-in duration-200">
-                                            <td colSpan={19} className="p-3 text-left">
-                                              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-indigo-100 shadow-xs">
-                                                <div className="flex items-center gap-2">
-                                                  <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-md">
-                                                    {h.tournament || "공식 전국선수권대회"}
-                                                  </span>
-                                                  <span className="text-xs font-bold text-slate-500 font-mono">
-                                                    {h.date || matchDate}
-                                                  </span>
-                                                </div>
-
-                                                <div className="flex items-center gap-3">
+                                            <td colSpan={19} className="p-2.5 sm:p-3 text-left">
+                                              <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-2">
+                                                {/* 상단 1행: 대회명, 날짜 및 경기상세보기 새창 버튼 */}
+                                                <div className="flex items-center justify-between gap-2 border-b border-indigo-50/80 pb-2">
                                                   <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
-                                                    <span className={`text-sm font-black ${scoreA > scoreB ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[0]?.trim() || '0'}</span>
-                                                    <span className="text-xs font-bold text-slate-300">:</span>
-                                                    <span className={`text-sm font-black ${scoreB > scoreA ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[1]?.trim() || '0'}</span>
-                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamB)}</span>
+                                                    <span className="text-[10px] sm:text-xs font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                                                      {h.tournament || "공식 전국선수권대회"}
+                                                    </span>
+                                                    <span className="text-[11px] font-bold text-slate-500 font-mono">
+                                                      {h.date || matchDate}
+                                                    </span>
                                                   </div>
+
                                                   {h.detailUrl && (
                                                     <button
-                                                      onClick={() => {
-                                                        setActiveDetailTab('compare');
-                                                        fetchDetail(h.detailUrl);
-                                                        setSelectedPlayer(null);
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleOpenPopupDetail(h.detailUrl);
                                                       }}
-                                                      className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                                                      className="text-[10px] sm:text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
+                                                      title="새창으로 경기상세보기 열기"
                                                     >
-                                                      경기상세보기 &gt;
+                                                      <span>경기상세보기</span>
+                                                      <span className="text-[9px]">↗</span>
                                                     </button>
                                                   )}
+                                                </div>
+
+                                                {/* 대회명 바로 밑 2행: 팀점수 표시 */}
+                                                <div className="flex items-center gap-2 pt-0.5">
+                                                  <span className="text-xs sm:text-sm font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
+                                                  <span className={`text-sm sm:text-base font-black px-1.5 py-0.5 rounded ${scoreA > scoreB ? 'text-red-600 bg-red-50' : 'text-slate-700 bg-slate-100'}`}>
+                                                    {scoreParts[0]?.trim() || '0'}
+                                                  </span>
+                                                  <span className="text-xs font-bold text-slate-300">:</span>
+                                                  <span className={`text-sm sm:text-base font-black px-1.5 py-0.5 rounded ${scoreB > scoreA ? 'text-red-600 bg-red-50' : 'text-slate-700 bg-slate-100'}`}>
+                                                    {scoreParts[1]?.trim() || '0'}
+                                                  </span>
+                                                  <span className="text-xs sm:text-sm font-black text-slate-800">{formatSchoolName(h.teamB)}</span>
                                                 </div>
                                               </div>
                                             </td>
@@ -2027,6 +2515,10 @@ export default function App() {
                                     const scoreA = parseInt(scoreParts[0]) || 0;
                                     const scoreB = parseInt(scoreParts[1]) || 0;
 
+                                    const onRowRecordClick = () => {
+                                      setSingleMatchHexagon({ match: h, isGoalie: false });
+                                    };
+
                                     return (
                                       <React.Fragment key={i}>
                                         <tr className={`hover:bg-slate-50 transition-colors group ${isExpanded ? 'bg-indigo-50/30' : ''}`}>
@@ -2041,67 +2533,78 @@ export default function App() {
                                               <span className="text-[9px] text-indigo-400 font-sans">{isExpanded ? '▲' : '▼'}</span>
                                             </div>
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800">{gsDisplay}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-bold text-slate-800">{shotRate}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m6 || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.wing || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m9 || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m7 || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.fb || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bt || '0/0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.as ?? '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.tf ?? '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bd ?? '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bs ?? '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.st ?? '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.rb ?? '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                          {/* 기록 셀들: 클릭 시 해당일 6각형 기록 분석차트 새창 모달 오픈 */}
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800 cursor-pointer hover:bg-indigo-50/70 transition-colors">{gsDisplay}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-bold text-slate-800 cursor-pointer hover:bg-indigo-50/70 transition-colors">{shotRate}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.m6 || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.wing || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.m9 || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.m7 || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.fb || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.bt || '0/0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.as ?? '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.tf ?? '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.bd ?? '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.bs ?? '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.st ?? '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 text-slate-600 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.rb ?? '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-center cursor-pointer hover:bg-indigo-50/70 transition-colors">
                                             {h.yc !== '0' && h.yc ? <span className="w-4 h-4 bg-yellow-400 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.yc}</span> : '0'}
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-center cursor-pointer hover:bg-indigo-50/70 transition-colors">
                                             {h.m2 !== '0' && h.m2 ? <span className="w-4 h-4 bg-indigo-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.m2}</span> : '0'}
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-center cursor-pointer hover:bg-indigo-50/70 transition-colors">
                                             {h.rc !== '0' && h.rc ? <span className="w-4 h-4 bg-red-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.rc}</span> : '0'}
                                           </td>
-                                          <td className="border border-gray-200 py-2 px-1.5 text-slate-500">{h.report ?? h.dr ?? '0'}</td>
-                                          <td className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500">{h.playTime || '00:60:00'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-1.5 text-slate-500 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.report ?? h.dr ?? '0'}</td>
+                                          <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.playTime || '00:60:00'}</td>
                                         </tr>
 
-                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 상대팀과의 대회정보 및 최종점수 화면 */}
+                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 대회정보 밑에 점수 표시 및 경기상세보기 새창 버튼 */}
                                         {isExpanded && (
                                           <tr className="bg-indigo-50/50 border-b-2 border-indigo-200 animate-in fade-in duration-200">
-                                            <td colSpan={20} className="p-3 text-left">
-                                              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-indigo-100 shadow-xs">
-                                                <div className="flex items-center gap-2">
-                                                  <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-md">
-                                                    {h.tournament || "공식 전국선수권대회"}
-                                                  </span>
-                                                  <span className="text-xs font-bold text-slate-500 font-mono">
-                                                    {h.date || matchDate}
-                                                  </span>
-                                                </div>
-
-                                                <div className="flex items-center gap-3">
+                                            <td colSpan={20} className="p-2.5 sm:p-3 text-left">
+                                              <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-2">
+                                                {/* 상단 1행: 대회명, 날짜 및 경기상세보기 새창 버튼 */}
+                                                <div className="flex items-center justify-between gap-2 border-b border-indigo-50/80 pb-2">
                                                   <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
-                                                    <span className={`text-sm font-black ${scoreA > scoreB ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[0]?.trim() || '0'}</span>
-                                                    <span className="text-xs font-bold text-slate-300">:</span>
-                                                    <span className={`text-sm font-black ${scoreB > scoreA ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[1]?.trim() || '0'}</span>
-                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamB)}</span>
+                                                    <span className="text-[10px] sm:text-xs font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
+                                                      {h.tournament || "공식 전국선수권대회"}
+                                                    </span>
+                                                    <span className="text-[11px] font-bold text-slate-500 font-mono">
+                                                      {h.date || matchDate}
+                                                    </span>
                                                   </div>
+
                                                   {h.detailUrl && (
                                                     <button
-                                                      onClick={() => {
-                                                        setActiveDetailTab('compare');
-                                                        fetchDetail(h.detailUrl);
-                                                        setSelectedPlayer(null);
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleOpenPopupDetail(h.detailUrl);
                                                       }}
-                                                      className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                                                      className="text-[10px] sm:text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
+                                                      title="새창으로 경기상세보기 열기"
                                                     >
-                                                      경기상세보기 &gt;
+                                                      <span>경기상세보기</span>
+                                                      <span className="text-[9px]">↗</span>
                                                     </button>
                                                   )}
+                                                </div>
+
+                                                {/* 대회명 바로 밑 2행: 팀점수 표시 */}
+                                                <div className="flex items-center gap-2 pt-0.5">
+                                                  <span className="text-xs sm:text-sm font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
+                                                  <span className={`text-sm sm:text-base font-black px-1.5 py-0.5 rounded ${scoreA > scoreB ? 'text-red-600 bg-red-50' : 'text-slate-700 bg-slate-100'}`}>
+                                                    {scoreParts[0]?.trim() || '0'}
+                                                  </span>
+                                                  <span className="text-xs font-bold text-slate-300">:</span>
+                                                  <span className={`text-sm sm:text-base font-black px-1.5 py-0.5 rounded ${scoreB > scoreA ? 'text-red-600 bg-red-50' : 'text-slate-700 bg-slate-100'}`}>
+                                                    {scoreParts[1]?.trim() || '0'}
+                                                  </span>
+                                                  <span className="text-xs sm:text-sm font-black text-slate-800">{formatSchoolName(h.teamB)}</span>
                                                 </div>
                                               </div>
                                             </td>
@@ -3620,6 +4123,10 @@ export default function App() {
 
         {/* Floating Player Modal */}
         {renderPlayerModal()}
+        {/* Single Match Hexagon Analysis Modal (역대경기세부기록 리스트 기록 클릭 시 새창) */}
+        {renderSingleMatchHexagonModal()}
+        {/* Popup Detail Modal (날짜 펼침화면 경기상세보기 클릭 시 새창) */}
+        {renderPopupDetailModal()}
         {/* School Recent Matches Modal (상단 학교명 클릭 시 표시) */}
         {renderSchoolRecentModal()}
         {/* Term Explanation Popup (단일 용어 전용 팝업 - 블러 제거, 배경 보임, 글자 위쪽 팝업) */}
@@ -3942,6 +4449,10 @@ export default function App() {
       {renderUpdatePopup()}
       {/* Player History Modal */}
       {renderPlayerModal()}
+      {/* Single Match Hexagon Analysis Modal (역대경기세부기록 리스트 기록 클릭 시 새창) */}
+      {renderSingleMatchHexagonModal()}
+      {/* Popup Detail Modal (날짜 펼침화면 경기상세보기 클릭 시 새창) */}
+      {renderPopupDetailModal()}
       {/* School Recent Matches Modal */}
       {renderSchoolRecentModal()}
       {/* Term Explanation Popup */}
