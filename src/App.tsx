@@ -815,22 +815,134 @@ export default function App() {
       return `${px.toFixed(1)},${py.toFixed(1)}`;
     }).join(' ');
 
+    // 통산 집계를 위한 헬퍼 및 변수
+    const totalMatchCount = matchesToShow.length || 1;
+    const parseFractionSafe = (val: any) => {
+      if (!val) return { val1: 0, val2: 0 };
+      const str = String(val).trim();
+      if (str.includes('/')) {
+        const parts = str.split('/');
+        return { val1: parseInt(parts[0]) || 0, val2: parseInt(parts[1]) || 0 };
+      }
+      const num = parseInt(str) || 0;
+      return { val1: num, val2: num };
+    };
+
+    // 필드 플레이어 누적 변수
+    let fGoals = 0, fShots = 0;
+    let f6mG = 0, f6mS = 0;
+    let fWingG = 0, fWingS = 0;
+    let f9mG = 0, f9mS = 0;
+    let f7mG = 0, f7mS = 0;
+    let fFbG = 0, fFbS = 0;
+    let fBtG = 0, fBtS = 0;
+    let fAs = 0, fTf = 0, fBd = 0, fBs = 0, fSt = 0, fRb = 0;
+    let fYc = 0, fM2 = 0, fRc = 0, fDr = 0;
+
+    // 골키퍼 누적 변수
+    let gSv = 0, gSvSh = 0;
+    let gGkg = 0, gGkas = 0;
+    let gWingSv = 0, gWingSh = 0;
+    let g6mSv = 0, g6mSh = 0;
+    let g9mSv = 0, g9mSh = 0;
+    let g7mSv = 0, g7mSh = 0;
+    let gFbSv = 0, gFbSh = 0;
+    let gBtSv = 0, gBtSh = 0;
+    let gHigh = 0, gMid = 0, gLow = 0;
+    let gYc = 0, gM2 = 0, gRc = 0, gDr = 0;
+
+    matchesToShow.forEach((m: any) => {
+      if (isCurrentPlayerGoalie) {
+        const svRaw = m.sv || (m.gs?.startsWith('SV:') ? m.gs.replace('SV:', '') : m.shots ? `${m.goals}/${m.shots}` : '0/0');
+        const svParsed = parseFractionSafe(svRaw);
+        gSv += svParsed.val1;
+        gSvSh += svParsed.val2;
+        gGkg += parseInt(m.gkg) || 0;
+        gGkas += parseInt(m.gkas || m.as) || 0;
+
+        const wP = parseFractionSafe(m.wing);
+        gWingSv += wP.val1; gWingSh += wP.val2;
+
+        const m6P = parseFractionSafe(m.m6);
+        g6mSv += m6P.val1; g6mSh += m6P.val2;
+
+        const m9P = parseFractionSafe(m.m9);
+        g9mSv += m9P.val1; g9mSh += m9P.val2;
+
+        const m7P = parseFractionSafe(m.m7);
+        g7mSv += m7P.val1; g7mSh += m7P.val2;
+
+        const fbP = parseFractionSafe(m.fb);
+        gFbSv += fbP.val1; gFbSh += fbP.val2;
+
+        const btP = parseFractionSafe(m.bt);
+        gBtSv += btP.val1; gBtSh += btP.val2;
+
+        gHigh += parseInt(m.high) || 0;
+        gMid += parseInt(m.mid) || 0;
+        gLow += parseInt(m.low) || 0;
+        gYc += parseInt(m.yc) || 0;
+        gM2 += parseInt(m.m2) || 0;
+        gRc += parseInt(m.rc) || 0;
+        gDr += parseInt(m.dr || m.report) || 0;
+      } else {
+        const gsP = parseFractionSafe(m.gs || `${m.goals || 0}/${m.shots || 0}`);
+        fGoals += gsP.val1; fShots += gsP.val2;
+
+        const m6P = parseFractionSafe(m.m6);
+        f6mG += m6P.val1; f6mS += m6P.val2;
+
+        const wP = parseFractionSafe(m.wing);
+        fWingG += wP.val1; fWingS += wP.val2;
+
+        const m9P = parseFractionSafe(m.m9);
+        f9mG += m9P.val1; f9mS += m9P.val2;
+
+        const m7P = parseFractionSafe(m.m7);
+        f7mG += m7P.val1; f7mS += m7P.val2;
+
+        const fbP = parseFractionSafe(m.fb);
+        fFbG += fbP.val1; fFbS += fbP.val2;
+
+        const btP = parseFractionSafe(m.bt);
+        fBtG += btP.val1; fBtS += btP.val2;
+
+        fAs += parseInt(m.as) || 0;
+        fTf += parseInt(m.tf) || 0;
+        fBd += parseInt(m.bd) || 0;
+        fBs += parseInt(m.bs) || 0;
+        fSt += parseInt(m.st) || 0;
+        fRb += parseInt(m.rb) || 0;
+        fYc += parseInt(m.yc) || 0;
+        fM2 += parseInt(m.m2) || 0;
+        fRc += parseInt(m.rc) || 0;
+        fDr += parseInt(m.dr) || 0;
+      }
+    });
+
+    const calcRate = (success: number, total: number) => {
+      if (total <= 0) return '0%';
+      return `${((success / total) * 100).toFixed(1)}%`;
+    };
+    const calcAvg = (num: number) => (num / totalMatchCount).toFixed(1);
+    const calcPerMatch = (attempts: number) => `${(attempts / totalMatchCount).toFixed(1)}회`;
+
     return (
       <AnimatePresence>
         {showHexagonModal && (
           <div 
-            className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
             onClick={() => setShowHexagonModal(false)}
           >
             <div 
               onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-sm rounded-[32px] p-5 shadow-2xl border border-indigo-100 space-y-4 animate-in zoom-in-95 duration-200"
+              className="bg-white w-full max-w-2xl sm:max-w-3xl rounded-[32px] p-5 sm:p-6 shadow-2xl border border-indigo-100 space-y-4 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200"
             >
               {/* Header */}
               <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
-                  <span className="text-sm font-black text-slate-800 tracking-tight">
+                  <span className="text-sm sm:text-base font-black text-slate-800 tracking-tight">
                     {selectedPlayer} 6각형 통산 기록 분석 차트
                   </span>
                   <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
@@ -845,6 +957,12 @@ export default function App() {
                 >
                   <X className="w-4 h-4" />
                 </button>
+              </div>
+
+              {/* 클릭 이벤트 설명 안내 배너 (클릭하면 나오는 이벤트는 항상 위에 설명 표시) */}
+              <div className="bg-indigo-50/90 border border-indigo-100 rounded-2xl px-3 py-2 flex items-center gap-2 text-[11px] text-indigo-800 font-medium shadow-2xs">
+                <span className="text-indigo-600 font-bold shrink-0">💡 클릭 안내:</span>
+                <span>차트의 용어(6m, Wing 등)나 하단 표의 헤더 항목을 클릭하면 작은 새창으로 상세 용어 설명이 표시됩니다.</span>
               </div>
 
               {/* Dynamic Hexagon Graphic Chart */}
@@ -931,7 +1049,7 @@ export default function App() {
 
                     return (
                       <g 
-                        key={idx}
+                        key={idx} 
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenTerm(item.label, e);
@@ -972,9 +1090,353 @@ export default function App() {
                 </svg>
               </div>
 
-              {/* 하단 설명 안내: 하단 표는 삭제하고, 용어 클릭 안내 제공 */}
-              <div className="text-[10px] text-center text-slate-400 font-medium pt-2 border-t border-gray-100">
-                용어(6m, Wing, 9m 등)를 클릭하면 작은 새창으로 용어 설명이 표시됩니다
+              {/* 6각형 차트 바로 밑: 역대 통산 기록 요약 통합 합계표 */}
+              <div className="space-y-2 pt-2 border-t border-gray-100">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                    <span className="text-xs sm:text-sm font-black text-slate-800">
+                      통합 합계표
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold">
+                      (총 {totalMatchCount}경기 집계)
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-indigo-600 font-bold">
+                    항목 클릭 시 용어설명 새창
+                  </span>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto shadow-xs">
+                  {isCurrentPlayerGoalie ? (
+                    /* 골키퍼(GK) 통합 합계표 (2단 헤더: Saves, Position Shots, Goal Area, Punishments, Run) */
+                    <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 text-[11px] font-bold">
+                          <th 
+                            rowSpan={2} 
+                            className="sticky left-0 bg-slate-100 border border-gray-200 py-1.5 px-3 z-20 text-[11px] font-bold text-slate-700 align-middle shadow-[1px_0_0_rgba(0,0,0,0.08)]"
+                          >
+                            구분
+                          </th>
+                          <th 
+                            colSpan={4} 
+                            onClick={(e) => handleOpenTerm('Saves', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Saves
+                          </th>
+                          <th 
+                            colSpan={6} 
+                            onClick={(e) => handleOpenTerm('Position Shots', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Position Shots
+                          </th>
+                          <th 
+                            colSpan={3} 
+                            onClick={(e) => handleOpenTerm('Goal Area', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Goal Area
+                          </th>
+                          <th 
+                            colSpan={4} 
+                            onClick={(e) => handleOpenTerm('Punishments', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Punishments
+                          </th>
+                          <th 
+                            rowSpan={2} 
+                            onClick={(e) => handleOpenTerm('Run', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 align-middle cursor-pointer hover:text-indigo-600"
+                          >
+                            Run
+                          </th>
+                        </tr>
+                        <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 text-[10px] font-bold">
+                          <th onClick={(e) => handleOpenTerm('방어율', e)} className="border border-gray-200 py-1.5 px-2.5 cursor-pointer hover:text-indigo-600">방어율</th>
+                          <th onClick={(e) => handleOpenTerm('SV', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">SV</th>
+                          <th onClick={(e) => handleOpenTerm('GKG', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">GKG</th>
+                          <th onClick={(e) => handleOpenTerm('GKAS', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">GKAS</th>
+                          <th onClick={(e) => handleOpenTerm('Wing', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">Wing</th>
+                          <th onClick={(e) => handleOpenTerm('6m', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">6m</th>
+                          <th onClick={(e) => handleOpenTerm('9m', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">9m</th>
+                          <th onClick={(e) => handleOpenTerm('7m', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">7m</th>
+                          <th onClick={(e) => handleOpenTerm('FB', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">FB</th>
+                          <th onClick={(e) => handleOpenTerm('BT', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">BT</th>
+                          <th onClick={(e) => handleOpenTerm('High', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">High</th>
+                          <th onClick={(e) => handleOpenTerm('Mid', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">Mid</th>
+                          <th onClick={(e) => handleOpenTerm('Low', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">Low</th>
+                          <th onClick={(e) => handleOpenTerm('YC', e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">YC</th>
+                          <th onClick={(e) => handleOpenTerm("2'", e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">2min</th>
+                          <th onClick={(e) => handleOpenTerm('RC', e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">RC</th>
+                          <th onClick={(e) => handleOpenTerm('DR', e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">DR</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 text-slate-700 text-xs">
+                        {/* 1. 합계 행 */}
+                        <tr className="bg-indigo-50/60 font-black text-slate-900 border-b border-indigo-100">
+                          <td className="sticky left-0 bg-indigo-100/90 text-indigo-900 border border-gray-200 py-2 px-2.5 font-black text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">합계</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-emerald-700">{calcRate(gSv, gSvSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-emerald-600">{gSv}/{gSvSh}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-800">{gGkg}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{gGkas}</td>
+                          <td className="border border-gray-200 py-2 px-2">{gWingSv}/{gWingSh}</td>
+                          <td className="border border-gray-200 py-2 px-2">{g6mSv}/{g6mSh}</td>
+                          <td className="border border-gray-200 py-2 px-2">{g9mSv}/{g9mSh}</td>
+                          <td className="border border-gray-200 py-2 px-2">{g7mSv}/{g7mSh}</td>
+                          <td className="border border-gray-200 py-2 px-2">{gFbSv}/{gFbSh}</td>
+                          <td className="border border-gray-200 py-2 px-2">{gBtSv}/{gBtSh}</td>
+                          <td className="border border-gray-200 py-2 px-2">{gHigh}</td>
+                          <td className="border border-gray-200 py-2 px-2">{gMid}</td>
+                          <td className="border border-gray-200 py-2 px-2">{gLow}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{gYc}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{gM2}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{gRc}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{gDr}</td>
+                          <td className="border border-gray-200 py-2 px-2 font-mono text-[11px]">{totalMatchCount}경기</td>
+                        </tr>
+                        {/* 2. 평균 행 */}
+                        <tr className="bg-white hover:bg-slate-50 font-bold text-slate-700 border-b border-gray-100">
+                          <td className="sticky left-0 bg-slate-50 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">평균</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-emerald-700">{calcRate(gSv, gSvSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-emerald-600">{calcAvg(gSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gGkg)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcAvg(gGkas)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gWingSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(g6mSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(g9mSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(g7mSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gFbSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gBtSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gHigh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gMid)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gLow)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(gYc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(gM2)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(gRc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(gDr)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                        </tr>
+                        {/* 3. 성공율(방어율) 행 */}
+                        <tr className="bg-emerald-50/40 hover:bg-emerald-50 font-bold text-emerald-800 border-b border-gray-100">
+                          <td className="sticky left-0 bg-emerald-100/70 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">방어율</td>
+                          <td className="border border-gray-200 py-2 px-2.5 font-black text-emerald-700">{calcRate(gSv, gSvSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2 font-black">{calcRate(gSv, gSvSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(gWingSv, gWingSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(g6mSv, g6mSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(g9mSv, g9mSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(g7mSv, g7mSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(gFbSv, gFbSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(gBtSv, gBtSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                        </tr>
+                        {/* 4. 경기당 횟수 행 */}
+                        <tr className="bg-white hover:bg-slate-50 font-bold text-slate-700">
+                          <td className="sticky left-0 bg-slate-50 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">경기당 횟수</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-800">{calcPerMatch(gSvSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gGkg)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcPerMatch(gGkas)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gWingSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(g6mSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(g9mSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(g7mSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gFbSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gBtSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gHigh)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gMid)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gLow)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(gYc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(gM2)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(gRc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(gDr)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  ) : (
+                    /* 필드 플레이어 통합 합계표 (2단 헤더: Shots, Offence, Deffence, RB, Punishments, Run) */
+                    <table className="w-full text-center border-collapse text-xs whitespace-nowrap min-w-max">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 text-[11px] font-bold">
+                          <th 
+                            rowSpan={2} 
+                            className="sticky left-0 bg-slate-100 border border-gray-200 py-1.5 px-3 z-20 text-[11px] font-bold text-slate-700 align-middle shadow-[1px_0_0_rgba(0,0,0,0.08)]"
+                          >
+                            구분
+                          </th>
+                          <th 
+                            colSpan={8} 
+                            onClick={(e) => handleOpenTerm('Shots', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Shots
+                          </th>
+                          <th 
+                            colSpan={2} 
+                            onClick={(e) => handleOpenTerm('Offence', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Offence
+                          </th>
+                          <th 
+                            colSpan={3} 
+                            onClick={(e) => handleOpenTerm('Deffence', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Deffence
+                          </th>
+                          <th 
+                            rowSpan={2} 
+                            onClick={(e) => handleOpenTerm('RB', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 align-middle cursor-pointer hover:text-indigo-600"
+                          >
+                            RB
+                          </th>
+                          <th 
+                            colSpan={4} 
+                            onClick={(e) => handleOpenTerm('Punishments', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 cursor-pointer hover:text-indigo-600"
+                          >
+                            Punishments
+                          </th>
+                          <th 
+                            rowSpan={2} 
+                            onClick={(e) => handleOpenTerm('Run', e)} 
+                            className="border border-gray-200 py-1.5 px-3 bg-slate-100/70 align-middle cursor-pointer hover:text-indigo-600"
+                          >
+                            Run
+                          </th>
+                        </tr>
+                        <tr className="bg-slate-50 border-b border-gray-200 text-slate-600 text-[10px] font-bold">
+                          <th onClick={(e) => handleOpenTerm('G/S', e)} className="border border-gray-200 py-1.5 px-2.5 cursor-pointer hover:text-indigo-600">G/S</th>
+                          <th onClick={(e) => handleOpenTerm('%', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">%</th>
+                          <th onClick={(e) => handleOpenTerm('6m', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">6m</th>
+                          <th onClick={(e) => handleOpenTerm('Wing', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">Wing</th>
+                          <th onClick={(e) => handleOpenTerm('9m', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">9m</th>
+                          <th onClick={(e) => handleOpenTerm('7m', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">7m</th>
+                          <th onClick={(e) => handleOpenTerm('FB', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">FB</th>
+                          <th onClick={(e) => handleOpenTerm('BT', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">BT</th>
+                          <th onClick={(e) => handleOpenTerm('AS', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">AS</th>
+                          <th onClick={(e) => handleOpenTerm('TF', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">TF</th>
+                          <th onClick={(e) => handleOpenTerm('BD', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">BD</th>
+                          <th onClick={(e) => handleOpenTerm('BS', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">BS</th>
+                          <th onClick={(e) => handleOpenTerm('ST', e)} className="border border-gray-200 py-1.5 px-2 cursor-pointer hover:text-indigo-600">ST</th>
+                          <th onClick={(e) => handleOpenTerm('YC', e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">YC</th>
+                          <th onClick={(e) => handleOpenTerm("2'", e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">2min</th>
+                          <th onClick={(e) => handleOpenTerm('RC', e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">RC</th>
+                          <th onClick={(e) => handleOpenTerm('DR', e)} className="border border-gray-200 py-1.5 px-1.5 cursor-pointer hover:text-indigo-600">DR</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 text-slate-700 text-xs">
+                        {/* 1. 합계 행 */}
+                        <tr className="bg-indigo-50/60 font-black text-slate-900 border-b border-indigo-100">
+                          <td className="sticky left-0 bg-indigo-100/90 text-indigo-900 border border-gray-200 py-2 px-2.5 font-black text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">합계</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-slate-900">{fGoals}/{fShots}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-emerald-700">{calcRate(fGoals, fShots)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{f6mG}/{f6mS}</td>
+                          <td className="border border-gray-200 py-2 px-2">{fWingG}/{fWingS}</td>
+                          <td className="border border-gray-200 py-2 px-2">{f9mG}/{f9mS}</td>
+                          <td className="border border-gray-200 py-2 px-2">{f7mG}/{f7mS}</td>
+                          <td className="border border-gray-200 py-2 px-2">{fFbG}/{fFbS}</td>
+                          <td className="border border-gray-200 py-2 px-2">{fBtG}/{fBtS}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{fAs}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{fTf}</td>
+                          <td className="border border-gray-200 py-2 px-2">{fBd}</td>
+                          <td className="border border-gray-200 py-2 px-2">{fBs}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{fSt}</td>
+                          <td className="border border-gray-200 py-2 px-2">{fRb}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{fYc}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{fM2}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{fRc}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{fDr}</td>
+                          <td className="border border-gray-200 py-2 px-2 font-mono text-[11px]">{totalMatchCount}경기</td>
+                        </tr>
+                        {/* 2. 평균 행 */}
+                        <tr className="bg-white hover:bg-slate-50 font-bold text-slate-700 border-b border-gray-100">
+                          <td className="sticky left-0 bg-slate-50 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">평균</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-slate-900">{calcAvg(fGoals)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-emerald-700">{calcRate(fGoals, fShots)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(f6mG)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(fWingG)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(f9mG)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(f7mG)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(fFbG)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(fBtG)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcAvg(fAs)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcAvg(fTf)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(fBd)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(fBs)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcAvg(fSt)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcAvg(fRb)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(fYc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(fM2)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(fRc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcAvg(fDr)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                        </tr>
+                        {/* 3. 성공율 행 */}
+                        <tr className="bg-emerald-50/40 hover:bg-emerald-50 font-bold text-emerald-800 border-b border-gray-100">
+                          <td className="sticky left-0 bg-emerald-100/70 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">성공율</td>
+                          <td className="border border-gray-200 py-2 px-2.5 font-black text-emerald-700">{calcRate(fGoals, fShots)}</td>
+                          <td className="border border-gray-200 py-2 px-2 font-black">{calcRate(fGoals, fShots)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(f6mG, f6mS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(fWingG, fWingS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(f9mG, f9mS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(f7mG, f7mS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(fFbG, fFbS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcRate(fBtG, fBtS)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                        </tr>
+                        {/* 4. 경기당 횟수 행 */}
+                        <tr className="bg-white hover:bg-slate-50 font-bold text-slate-700">
+                          <td className="sticky left-0 bg-slate-50 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">경기당 횟수</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-slate-800">{calcPerMatch(fShots)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(f6mS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(fWingS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(f9mS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(f7mS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(fFbS)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(fBtS)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcPerMatch(fAs)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcPerMatch(fTf)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(fBd)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(fBs)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcPerMatch(fSt)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(fRb)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(fYc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(fM2)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(fRc)}</td>
+                          <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(fDr)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1098,6 +1560,12 @@ export default function App() {
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
+
+          {/* 클릭 이벤트 설명 안내 배너 (클릭하면 나오는 이벤트는 항상 위에 설명 표시) */}
+          <div className="bg-indigo-50/90 border border-indigo-100 rounded-2xl px-3 py-2 flex items-center gap-2 text-[11px] text-indigo-800 font-medium shadow-2xs">
+            <span className="text-indigo-600 font-bold shrink-0">💡 클릭 안내:</span>
+            <span>차트의 용어(6m, Wing 등)를 클릭하면 작은 새창으로 상세 용어 설명이 표시됩니다.</span>
           </div>
 
           {/* Match Score Strip */}
@@ -2355,7 +2823,7 @@ export default function App() {
                                     const scoreB = parseInt(scoreParts[1]) || 0;
 
                                     const onRowRecordClick = () => {
-                                      setSingleMatchHexagon({ match: h, isGoalie: true });
+                                      setSingleMatchHexagon({ match: h, isGoalie: true, allMatches: matchesToShow });
                                     };
 
                                     return (
@@ -2538,7 +3006,7 @@ export default function App() {
                                     const scoreB = parseInt(scoreParts[1]) || 0;
 
                                     const onRowRecordClick = () => {
-                                      setSingleMatchHexagon({ match: h, isGoalie: false });
+                                      setSingleMatchHexagon({ match: h, isGoalie: false, allMatches: matchesToShow });
                                     };
 
                                     return (
