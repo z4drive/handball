@@ -327,6 +327,12 @@ async function startServer() {
                     high: statsTds.eq(10).text().trim(),// High
                     mid: statsTds.eq(11).text().trim(), // Mid
                     low: statsTds.eq(12).text().trim(), // Low
+                    yc: statsTds.length > 13 ? statsTds.eq(13).text().trim() : "0",
+                    m2: statsTds.length > 14 ? statsTds.eq(14).text().trim() : "0",
+                    rc: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
+                    report: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                    dr: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                    playTime: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "00:60:00",
                     gs: statsTds.eq(1).text().trim(),
                   });
                 } else {
@@ -347,10 +353,12 @@ async function startServer() {
                     bd: statsTds.eq(10).text().trim(),
                     bs: statsTds.eq(11).text().trim(),
                     st: statsTds.eq(12).text().trim(),
+                    rb: statsTds.eq(13).text().trim(),
                     yc: statsTds.eq(14).text().trim(),
                     m2: statsTds.eq(15).text().trim(),
                     rc: statsTds.eq(16).text().trim(),
                     report: statsTds.eq(17).text().trim(),
+                    dr: statsTds.eq(17).text().trim(),
                     playTime: statsTds.eq(18).text().trim()
                   });
                 }
@@ -388,6 +396,7 @@ async function startServer() {
       });
 
       res.json({
+        url,
         tournament,
         matchInfo,
         homeTeam,
@@ -442,16 +451,133 @@ async function startServer() {
     return false;
   }
 
-  // 선수 개인 경기 기록 스크래퍼
+  // 선수 개인 경기 기록 및 KHF 경기기록지 HTML 인메모리 캐시
+  const playerHistoryCache = new Map<string, { data: any[]; time: number }>();
+  const matchRecordHtmlCache = new Map<string, string>();
+  const playerYearTeamsCache = new Map<string, Record<number, string[]>>();
+
+  // 대한체육회 등록이력 기반 연도별 소속학교 매핑 조회 헬퍼 (중학교->고등학교 진학 선수 완벽 추적)
+  async function getPlayerYearTeams(name: string, currentTeam: string): Promise<Record<number, string[]>> {
+    const key = `${name}_${currentTeam}`;
+    const cached = playerYearTeamsCache.get(key);
+    if (cached) return cached;
+
+    const map: Record<number, string[]> = {
+      2026: currentTeam ? [currentTeam] : [],
+      2025: currentTeam ? [currentTeam] : [],
+      2024: currentTeam ? [currentTeam] : []
+    };
+
+    try {
+      const searchUrl = "https://g1.sports.or.kr/stat/playerSearch.do";
+      const postData = new URLSearchParams({
+        gubun: "P",
+        searchClassCd: "HB",
+        searchSidoCd: "",
+        searchSexCd: "",
+        searchName: name
+      }).toString();
+
+      const response = await axios.post(searchUrl, postData, {
+        headers: {
+          ...scrapingHeaders,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Referer": "https://g1.sports.or.kr/stat/playerSearch.do?gubun=P",
+          "Origin": "https://g1.sports.or.kr"
+        },
+        timeout: 4500
+      });
+
+      const $ = cheerio.load(response.data);
+      let candidates: { team: string; personNo: string; classCd: string }[] = [];
+
+      $("table tbody tr").each((_, tr) => {
+        const tds = $(tr).find("td");
+        if (tds.length >= 7) {
+          const onclickAttr = $(tr).attr("onclick") || "";
+          const match = onclickAttr.match(/viewHistory\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/);
+          const pName = $(tds[1]).text().trim();
+          const teamName = tds.length >= 8 ? $(tds[7]).text().trim() : "";
+          if (pName === name && match) {
+            candidates.push({ team: teamName, classCd: match[1], personNo: match[2] });
+          }
+        }
+      });
+
+      if (currentTeam && candidates.length > 0) {
+        const matched = candidates.filter(c => isSchoolMatch(c.team, currentTeam));
+        if (matched.length > 0) candidates = matched;
+      }
+
+      if (candidates.length > 0 && candidates[0].personNo) {
+        const detailRes = await axios.post(
+          "https://g1.sports.or.kr/stat/playerSearchResult.do",
+          new URLSearchParams({
+            gubun: "P",
+            searchClassCd: "HB",
+            searchSidoCd: "",
+            searchSexCd: "",
+            searchName: name,
+            classCd: candidates[0].classCd || "HB",
+            personNo: candidates[0].personNo
+          }).toString(),
+          {
+            headers: {
+              ...scrapingHeaders,
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Referer": searchUrl,
+              "Origin": "https://g1.sports.or.kr"
+            },
+            timeout: 4500
+          }
+        );
+
+        const $d = cheerio.load(detailRes.data);
+        $d(".lookup").each((_, lookup) => {
+          const title = $d(lookup).find(".lookup-header__title").text().trim();
+          if (title.includes("등록이력")) {
+            $d(lookup).find("table tbody tr").each((_, tr) => {
+              const tds = $d(tr).find("td");
+              if (tds.length >= 6) {
+                const yr = parseInt($d(tds[0]).text().trim(), 10);
+                const tm = $d(tds[4]).text().trim();
+                if ((yr === 2026 || yr === 2025 || yr === 2024) && tm) {
+                  if (!map[yr]) map[yr] = [];
+                  if (!map[yr].includes(tm)) {
+                    map[yr].unshift(tm);
+                  }
+                }
+              }
+            });
+          }
+        });
+      }
+      playerYearTeamsCache.set(key, map);
+    } catch (e) {
+      // ignore portal error, use currentTeam fallback
+    }
+    return map;
+  }
+
+  // 선수 개인 경기 기록 스크래퍼 (KHF 공식 일정 및 경기결과 상세 기록지 연동)
   app.get("/api/player-history", async (req, res) => {
     try {
-      const { name, team } = req.query;
+      const name = (req.query.name as string || "").trim();
+      const team = (req.query.team as string || "").trim();
+      const isGoalieReq = req.query.isGoalie === "true";
       if (!name) return res.status(400).json({ error: "선수명이 필요합니다." });
 
-      const years = [2026, 2025, 2024]; // 최근 3개년 데이터 조회
+      const cacheKey = `v3_${name}_${team}_${isGoalieReq ? 'GK' : 'FIELD'}`;
+      const cached = playerHistoryCache.get(cacheKey);
+      if (cached && Date.now() - cached.time < 15 * 60 * 1000) {
+        return res.json({ history: cached.data });
+      }
+
+      const years = [2026, 2025, 2024]; // 최근 3개년 KHF 공식 데이터 조회
+      const yearTeamsMap = await getPlayerYearTeams(name, team);
       let allMatches: any[] = [];
-      const targetTeam = team as string;
-      
+      const cleanTargetName = name.replace(/\s+/g, '');
+
       for (const year of years) {
         try {
           const html = await getYearScheduleHtml(year);
@@ -460,13 +586,17 @@ async function startServer() {
           const $ = cheerio.load(html);
           let currentTournament = "";
           let currentDate = "";
+          const validTeamsForYear = yearTeamsMap[year] && yearTeamsMap[year].length > 0
+            ? yearTeamsMap[year]
+            : (team ? [team] : []);
 
           $(".table_wrap table tbody tr").each((_, element) => {
             const tds = $(element).find("td");
             const th = $(element).find("th");
 
             if (th.length > 0) {
-              currentTournament = th.text().trim();
+              const thText = th.text().trim();
+              if (thText) currentTournament = thText;
             }
 
             let timeOffset = 0;
@@ -484,10 +614,11 @@ async function startServer() {
             const score = scoreCell.find(".score").text().trim();
             const detailUrlRaw = scoreCell.find(".score").attr("href");
 
-            // 관계없는 데이터 필터링: 팀명/학교정보 일치 확인 (동일이름 구분)
-            if (targetTeam) {
-              const isMatch = isSchoolMatch(teamA, targetTeam) || isSchoolMatch(teamB, targetTeam);
-              if (!isMatch) return;
+            let matchedPlayerTeam = team;
+            if (validTeamsForYear.length > 0) {
+              const foundTeam = validTeamsForYear.find(t => isSchoolMatch(teamA, t) || isSchoolMatch(teamB, t));
+              if (!foundTeam) return;
+              matchedPlayerTeam = foundTeam;
             }
             
             let detailUrl = null;
@@ -502,85 +633,133 @@ async function startServer() {
             if (teamA && teamB && detailUrl) {
               allMatches.push({
                 date: currentDate,
-                tournament: currentTournament,
+                tournament: currentTournament || `${year}년 전국핸드볼대회`,
                 teamA,
                 teamB,
+                playerTeam: matchedPlayerTeam,
                 score: score || "VS",
                 detailUrl
               });
             }
           });
         } catch (e: any) {
-          console.warn(`[PlayerHistory] Notice for year ${year}: ${e?.message}`);
+          console.warn(`[PlayerHistory] Schedule crawl notice for ${year}: ${e?.message}`);
         }
       }
 
-      // 최근 경기 순으로 정렬 (날짜 형식이 2024.08.15 (목) 형태이므로 점 기준으로 정렬)
-      allMatches.sort((a, b) => {
-        const dateA = a.date.split(' ')[0] || "";
-        const dateB = b.date.split(' ')[0] || "";
+      // 중복 경기 완벽 제거 (detailUrl 및 날짜+대회명+양팀명 기준)
+      const seenMatchKeys = new Set<string>();
+      const seenUrls = new Set<string>();
+      const uniqueMatches: any[] = [];
+      
+      allMatches.forEach(m => {
+        if (!m.detailUrl || seenUrls.has(m.detailUrl)) return;
+        const cleanDate = ((m.date || "").match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0] || m.date || "").replace(/-/g, '.');
+        const cleanTourn = (m.tournament || "").replace(/\s+/g, '');
+        const cleanA = (m.teamA || "").replace(/\s+/g, '');
+        const cleanB = (m.teamB || "").replace(/\s+/g, '');
+        const key = `${cleanDate}_${cleanTourn}_${cleanA}_${cleanB}`;
+        
+        if (!seenMatchKeys.has(key)) {
+          seenMatchKeys.add(key);
+          seenUrls.add(m.detailUrl);
+          uniqueMatches.push({
+            ...m,
+            cleanDate
+          });
+        }
+      });
+
+      // 최신 경기 순(최신 날짜 내림차순) 정렬
+      uniqueMatches.sort((a, b) => {
+        const dateA = a.cleanDate || "";
+        const dateB = b.cleanDate || "";
         return dateB.localeCompare(dateA);
       });
+
+      // 상위 35개 경기에 대해 실제 KHF 선수 개인 기록지(detail_player_record_new.php) 스크래핑
+      const matchesToFetch = uniqueMatches.slice(0, 35);
       
-      // 중복 제거 (토너먼트, 날짜, 팀이 같으면 동일 경기로 간주)
-      const uniqueMatches = Array.from(new Map(allMatches.map(m => [`${m.tournament}-${m.date}-${m.teamA}-${m.teamB}`, m])).values());
-      
-      // 상위 30개 경기에 대해 실제 선수 기록 추출 (조금 더 늘림)
-      const matchesToFetch = uniqueMatches.slice(0, 30);
-      
-      const historyWithStats = await Promise.all(matchesToFetch.map(async (m) => {
+      const crawledRecords = await Promise.all(matchesToFetch.map(async (m) => {
         try {
           const playerRecordUrl = m.detailUrl.replace("detail_new.php", "detail_player_record_new.php");
-          const res = await axios.get(playerRecordUrl, {
-            headers: scrapingHeaders,
-            timeout: 5000
-          });
-          const $p = cheerio.load(res.data);
-          let playerStats = null;
+          let htmlData = matchRecordHtmlCache.get(playerRecordUrl);
+          if (!htmlData) {
+            const res = await axios.get(playerRecordUrl, {
+              headers: scrapingHeaders,
+              timeout: 6000
+            });
+            if (res.data && typeof res.data === "string") {
+              htmlData = res.data;
+              matchRecordHtmlCache.set(playerRecordUrl, htmlData);
+            }
+          }
+          if (!htmlData) return null;
 
-          $p(".table_wrap.record").each((_, wrap) => {
+          const $p = cheerio.load(htmlData);
+          let foundStat: any = null;
+
+          // 홈팀(sub_cont 0) / 원정팀(sub_cont 1) 구분하여 동명이인 혼선 방지
+          const subConts = $p(".sub_cont");
+          let targetWraps = $p(".table_wrap.record");
+          if (subConts.length >= 2 && m.playerTeam) {
+            const isHome = isSchoolMatch(m.teamA, m.playerTeam);
+            const isAway = isSchoolMatch(m.teamB, m.playerTeam);
+            if (isHome && !isAway) {
+              targetWraps = subConts.eq(0).find(".table_wrap.record");
+            } else if (isAway && !isHome) {
+              targetWraps = subConts.eq(1).find(".table_wrap.record");
+            }
+          }
+
+          targetWraps.each((_, wrap) => {
             const isGoalieTable = $p(wrap).find("th:contains('SV')").length > 0 || $p(wrap).find("th:contains('방어율')").length > 0;
             const fixedRows = $p(wrap).find(".fixed_table table tbody tr");
             const scrollRows = $p(wrap).find(".scroll_table table tbody tr");
             
             fixedRows.each((i, tr) => {
-              const nameText = $p(tr).find("td").eq(1).text().trim();
-              if (nameText === name) {
+              const nameText = $p(tr).find("td").eq(1).text().replace(/\s+/g, '');
+              if (nameText === cleanTargetName) {
                 const statsTds = scrollRows.eq(i).find("td");
                 if (isGoalieTable) {
-                  playerStats = {
-                    isGoalie: true,
-                    rate: statsTds.eq(0).text().trim().replace('%', '') || "0",
-                    sv: statsTds.eq(1).text().trim() || "0",
-                    gkg: statsTds.length > 2 ? statsTds.eq(2).text().trim() : "0",
-                    gkas: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
-                    wing: statsTds.length > 4 ? statsTds.eq(4).text().trim() : "-",
-                    m6: statsTds.length > 5 ? statsTds.eq(5).text().trim() : "-",
-                    m9: statsTds.length > 6 ? statsTds.eq(6).text().trim() : "-",
-                    m7: statsTds.length > 7 ? statsTds.eq(7).text().trim() : "-",
-                    fb: statsTds.length > 8 ? statsTds.eq(8).text().trim() : "-",
-                    bt: statsTds.length > 9 ? statsTds.eq(9).text().trim() : "-",
-                    high: statsTds.length > 10 ? statsTds.eq(10).text().trim() : "-",
-                    mid: statsTds.length > 11 ? statsTds.eq(11).text().trim() : "-",
-                    low: statsTds.length > 12 ? statsTds.eq(12).text().trim() : "-",
-                    gs: `SV:${statsTds.eq(1).text().trim()}`,
-                    as: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
-                    tf: "0",
-                    bd: "0",
-                    bs: "0",
-                    st: "0",
-                    rb: "0",
-                    yc: statsTds.length > 13 ? statsTds.eq(13).text().trim() : "0",
-                    m2: statsTds.length > 14 ? statsTds.eq(14).text().trim() : "0",
-                    rc: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
-                    report: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
-                    playTime: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "00:60:00"
-                  };
-                } else {
-                  playerStats = {
+                  if (!foundStat || isGoalieReq) {
+                    foundStat = {
+                      hasPlayed: true,
+                      isGoalie: true,
+                      rate: statsTds.eq(0).text().trim() || "0%",
+                      sv: statsTds.eq(1).text().trim() || "0",
+                      gkg: statsTds.length > 2 ? statsTds.eq(2).text().trim() : "0",
+                      gkas: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
+                      wing: statsTds.length > 4 ? statsTds.eq(4).text().trim() : "0/0",
+                      m6: statsTds.length > 5 ? statsTds.eq(5).text().trim() : "0/0",
+                      m9: statsTds.length > 6 ? statsTds.eq(6).text().trim() : "0/0",
+                      m7: statsTds.length > 7 ? statsTds.eq(7).text().trim() : "0/0",
+                      fb: statsTds.length > 8 ? statsTds.eq(8).text().trim() : "0/0",
+                      bt: statsTds.length > 9 ? statsTds.eq(9).text().trim() : "0/0",
+                      high: statsTds.length > 10 ? statsTds.eq(10).text().trim() : "0/0",
+                      mid: statsTds.length > 11 ? statsTds.eq(11).text().trim() : "0/0",
+                      low: statsTds.length > 12 ? statsTds.eq(12).text().trim() : "0/0",
+                      gs: `SV:${statsTds.eq(1).text().trim() || '0'}`,
+                      as: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
+                      tf: "0",
+                      bd: "0",
+                      bs: "0",
+                      st: "0",
+                      rb: "0",
+                      yc: statsTds.length > 13 ? statsTds.eq(13).text().trim() : "0",
+                      m2: statsTds.length > 14 ? statsTds.eq(14).text().trim() : "0",
+                      rc: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
+                      report: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                      dr: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                      playTime: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "00:00:00"
+                    };
+                  }
+                } else if (!foundStat || !isGoalieReq) {
+                  foundStat = {
+                    hasPlayed: true,
                     isGoalie: false,
                     gs: statsTds.eq(0).text().trim() || "0/0",
-                    rate: statsTds.eq(1).text().trim().replace('%', '') || "0",
+                    rate: statsTds.eq(1).text().trim() || "0%",
                     m6: statsTds.length > 2 ? statsTds.eq(2).text().trim() : "0/0",
                     wing: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0/0",
                     m9: statsTds.length > 4 ? statsTds.eq(4).text().trim() : "0/0",
@@ -597,78 +776,48 @@ async function startServer() {
                     m2: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
                     rc: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
                     report: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "0",
-                    playTime: statsTds.length > 18 ? statsTds.eq(18).text().trim() : "00:60:00"
+                    dr: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "0",
+                    playTime: statsTds.length > 18 ? statsTds.eq(18).text().trim() : "00:00:00"
                   };
                 }
               }
             });
           });
 
-          return {
-            ...m,
-            isGoalie: playerStats ? (playerStats as any).isGoalie : false,
-            sv: playerStats ? (playerStats as any).sv : "0",
-            gkg: playerStats ? (playerStats as any).gkg : "0",
-            gkas: playerStats ? (playerStats as any).gkas : "0",
-            wing: playerStats ? (playerStats as any).wing : "0/0",
-            m6: playerStats ? (playerStats as any).m6 : "0/0",
-            m9: playerStats ? (playerStats as any).m9 : "0/0",
-            m7: playerStats ? (playerStats as any).m7 : "0/0",
-            fb: playerStats ? (playerStats as any).fb : "0/0",
-            bt: playerStats ? (playerStats as any).bt : "0/0",
-            high: playerStats ? (playerStats as any).high : "-",
-            mid: playerStats ? (playerStats as any).mid : "-",
-            low: playerStats ? (playerStats as any).low : "-",
-            gs: playerStats ? (playerStats as any).gs : "0/0",
-            rate: playerStats ? (playerStats as any).rate : "0",
-            as: playerStats ? (playerStats as any).as : "0",
-            tf: playerStats ? (playerStats as any).tf : "0",
-            bd: playerStats ? (playerStats as any).bd : "0",
-            bs: playerStats ? (playerStats as any).bs : "0",
-            st: playerStats ? (playerStats as any).st : "0",
-            rb: playerStats ? (playerStats as any).rb : "0",
-            yc: playerStats ? (playerStats as any).yc : "0",
-            m2: playerStats ? (playerStats as any).m2 : "0",
-            rc: playerStats ? (playerStats as any).rc : "0",
-            report: playerStats ? (playerStats as any).report : "0",
-            dr: playerStats ? (playerStats as any).report : "0",
-            playTime: playerStats ? (playerStats as any).playTime : "00:60:00"
-          };
+          if (foundStat) {
+            return {
+              ...m,
+              date: m.cleanDate || m.date,
+              cleanDate: m.cleanDate || m.date,
+              ...foundStat
+            };
+          }
+          return null;
         } catch (e) {
-          return {
-            ...m,
-            isGoalie: false,
-            sv: "0",
-            gkg: "0",
-            gkas: "0",
-            wing: "0/0",
-            m6: "0/0",
-            m9: "0/0",
-            m7: "0/0",
-            fb: "0/0",
-            bt: "0/0",
-            high: "-",
-            mid: "-",
-            low: "-",
-            gs: "0/0",
-            rate: "0",
-            as: "0",
-            tf: "0",
-            bd: "0",
-            bs: "0",
-            st: "0",
-            rb: "0",
-            yc: "0",
-            m2: "0",
-            rc: "0",
-            report: "0",
-            dr: "0",
-            playTime: "-"
-          };
+          return null;
         }
       }));
 
-      res.json({ history: historyWithStats }); 
+      // 실제 KHF 기록지에 출전 기록이 존재하는 경기만 엄격 선별 (최신 날짜 내림차순 유지)
+      const actualPlayedMatches = crawledRecords.filter(Boolean);
+      const finalResult: any[] = [];
+      const usedDates = new Set<string>();
+
+      actualPlayedMatches.forEach(m => {
+        const d = m.cleanDate || m.date;
+        if (d && !usedDates.has(d)) {
+          usedDates.add(d);
+          finalResult.push(m);
+        }
+      });
+
+      // 최신순(내림차순) 재보장
+      finalResult.sort((a, b) => (b.cleanDate || b.date || "").localeCompare(a.cleanDate || a.date || ""));
+
+      if (finalResult.length > 0) {
+        playerHistoryCache.set(cacheKey, { data: finalResult, time: Date.now() });
+      }
+      res.json({ history: finalResult });
     } catch (error: any) {
       console.error("Player history error:", error.message);
       res.status(500).json({ error: "선수 기록을 불러오지 못했습니다." });

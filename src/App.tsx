@@ -11,6 +11,7 @@ import axios from 'axios';
 interface Match {
   id: string;
   date: string;
+  tournament?: string;
   teamA: string;
   teamB: string;
   score: string;
@@ -35,10 +36,12 @@ interface PlayerRecord {
   bd?: string;
   bs: string;
   st: string;
+  rb?: string;
   yc: string;
   m2: string;
   rc: string;
   report?: string;
+  dr?: string;
   playTime?: string;
   isGoalie?: boolean;
 }
@@ -84,6 +87,7 @@ export default function App() {
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [selectedPlayerTeam, setSelectedPlayerTeam] = useState<string | undefined>(undefined);
   const [selectedPlayerIsGoalie, setSelectedPlayerIsGoalie] = useState(false);
+  const [selectedPlayerDirectRecord, setSelectedPlayerDirectRecord] = useState<any | null>(null);
   const [playerHistory, setPlayerHistory] = useState<any[]>([]);
   const [playerLoading, setPlayerLoading] = useState(false);
   
@@ -102,10 +106,12 @@ export default function App() {
   const dismissedVersionRef = useRef<string | null>(null);
 
   const handleClosePlayer = () => {
+    setExpandedCareerDate(null);
     if (window.history.state?.modal === 'player') {
       window.history.back();
     } else {
       setSelectedPlayer(null);
+      setSelectedPlayerDirectRecord(null);
       setSelectedPlayerIsGoalie(false);
       setPlayerPortalInfo(null);
       setShowPortalTab(false);
@@ -134,6 +140,12 @@ export default function App() {
 
   // 역대기록 탭 페이지네이션 상태 (10경기씩 표시)
   const [careerPage, setCareerPage] = useState<number>(1);
+
+  // 역대기록 탭 날짜 클릭 시 바로 하단에 펼쳐지는 경기정보/점수 서브행 상태
+  const [expandedCareerDate, setExpandedCareerDate] = useState<string | null>(null);
+
+  // 역대기록 탭 상단 헤더 '총 N경기 출전 통합' 클릭 시 6각형 기록 차트 모달 열림 상태
+  const [showHexagonModal, setShowHexagonModal] = useState<boolean>(false);
 
   // 학교명 뒤 축약 표시 함수 (대학교->대, 고등학교->고, 중학교->중, 초등학교->초)
   const formatSchoolName = (name?: string): string => {
@@ -657,6 +669,320 @@ export default function App() {
     );
   };
 
+  // 6각형 레이더 차트 모달 렌더링 (필드: 6m, Wing, 9m, 7m, FB, BT / 골키퍼: Wing, 6m, 9m, 7m, FB, BT)
+  // 6각형 레이더 차트 인라인 섹션 렌더링 (역대통산기록요약과 역대경기세부기록 사이 동적 애니메이션)
+  const renderHexagonSection = () => {
+    if (!selectedPlayer) return null;
+
+    const filteredMatches = selectedPlayerTeam 
+      ? playerHistory.filter(h => isSchoolMatch(h.teamA, selectedPlayerTeam) || isSchoolMatch(h.teamB, selectedPlayerTeam))
+      : playerHistory;
+    const baseMatches = filteredMatches.length > 0 ? filteredMatches : playerHistory;
+
+    // 날짜(YYYY.MM.DD) + 대회명 + 상대팀 기준 중복 완벽 제거 및 최신순 정렬
+    const seenMatchSet = new Set<string>();
+    const deduplicatedMatches: any[] = [];
+    baseMatches.forEach(m => {
+      const cleanDate = (m.cleanDate || m.date || "").match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0]?.replace(/-/g, '.') || m.date || "";
+      const cleanTourn = (m.tournament || "").replace(/\s+/g, '');
+      const cleanTeams = `${m.teamA || ''}_${m.teamB || ''}`.replace(/\s+/g, '');
+      const key = `${cleanDate}_${cleanTourn}_${cleanTeams}`;
+      if (!seenMatchSet.has(key)) {
+        seenMatchSet.add(key);
+        deduplicatedMatches.push({ ...m, cleanDate });
+      }
+    });
+
+    deduplicatedMatches.sort((a, b) => (b.cleanDate || "").localeCompare(a.cleanDate || ""));
+    const matchesToShow = deduplicatedMatches;
+
+    const isCurrentPlayerGoalie = selectedPlayerIsGoalie 
+      || playerHistory.some(h => h.isGoalie) 
+      || (playerPortalInfo?.recentMatchRecords && playerPortalInfo.recentMatchRecords.some((m: any) => m.position === 'GK'));
+
+    // 6가지 축 라벨 (필드: 6m, Wing, 9m, 7m, FB, BT / 골키퍼: Wing, 6m, 9m, 7m, FB, BT)
+    const axes = isCurrentPlayerGoalie 
+      ? ['Wing', '6m', '9m', '7m', 'FB', 'BT']
+      : ['6m', 'Wing', '9m', '7m', 'FB', 'BT'];
+
+    // 6가지 축 데이터 집계
+    const statsSummary = axes.map((axisKey) => {
+      if (isCurrentPlayerGoalie) {
+        let rateSum = 0;
+        let count = 0;
+        matchesToShow.forEach((m) => {
+          let valStr = "";
+          if (axisKey === 'Wing') valStr = m.wing || "";
+          else if (axisKey === '6m') valStr = m.m6 || "";
+          else if (axisKey === '9m') valStr = m.m9 || "";
+          else if (axisKey === '7m') valStr = m.m7 || "";
+          else if (axisKey === 'FB') valStr = m.fb || "";
+          else if (axisKey === 'BT') valStr = m.bt || "";
+          
+          if (valStr && valStr.includes('/')) {
+            const parts = valStr.split('/');
+            const sv = parseInt(parts[0]) || 0;
+            const sh = parseInt(parts[1]) || 0;
+            if (sh > 0) {
+              rateSum += (sv / sh) * 100;
+              count++;
+            }
+          } else {
+            const num = parseFloat((valStr || '').replace('%', ''));
+            if (!isNaN(num) && num >= 0) {
+              rateSum += num;
+              count++;
+            }
+          }
+        });
+        const avg = count > 0 ? Math.round((rateSum / count) * 10) / 10 : 0;
+        return {
+          key: axisKey,
+          label: axisKey,
+          rate: avg,
+          detail: `${avg}%`,
+          ratio: Math.min(100, Math.max(10, avg)) / 100,
+        };
+      } else {
+        let scored = 0;
+        let attempted = 0;
+        matchesToShow.forEach((m) => {
+          let valStr = "";
+          if (axisKey === '6m') valStr = m.m6 || "";
+          else if (axisKey === 'Wing') valStr = m.wing || "";
+          else if (axisKey === '9m') valStr = m.m9 || "";
+          else if (axisKey === '7m') valStr = m.m7 || "";
+          else if (axisKey === 'FB') valStr = m.fb || "";
+          else if (axisKey === 'BT') valStr = m.bt || "";
+
+          if (valStr && valStr.includes('/')) {
+            const parts = valStr.split('/');
+            scored += parseInt(parts[0]) || 0;
+            attempted += parseInt(parts[1]) || 0;
+          }
+        });
+
+        const rate = attempted > 0 ? Math.round((scored / attempted) * 1000) / 10 : 0;
+        return {
+          key: axisKey,
+          label: axisKey,
+          scored,
+          attempted,
+          rate,
+          detail: `${scored}/${attempted} (${rate}%)`,
+          ratio: Math.min(100, Math.max(15, rate)) / 100,
+        };
+      }
+    });
+
+    // 6각형 기하학적 파라미터
+    const cx = 150;
+    const cy = 145;
+    const R = 85; // 외곽 최대 반지름
+
+    // 6개 꼭짓점 각도: 12시(-90도)부터 시계방향 60도씩
+    const angles = [
+      -Math.PI / 2,             // 12시 (상)
+      -Math.PI / 6,             // 2시 (우상)
+      Math.PI / 6,              // 4시 (우하)
+      Math.PI / 2,              // 6시 (하)
+      (5 * Math.PI) / 6,        // 8시 (좌하)
+      (-5 * Math.PI) / 6,       // 10시 (좌상)
+    ];
+
+    // 격자 레벨 (20%, 40%, 60%, 80%, 100%)
+    const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
+
+    // 선수 데이터 다각형 좌표 계산
+    const polygonPoints = statsSummary.map((item, idx) => {
+      const angle = angles[idx];
+      const radius = R * Math.max(0.18, item.ratio);
+      const px = cx + radius * Math.cos(angle);
+      const py = cy + radius * Math.sin(angle);
+      return `${px.toFixed(1)},${py.toFixed(1)}`;
+    }).join(' ');
+
+    return (
+      <AnimatePresence>
+        {showHexagonModal && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0, scale: 0.96 }}
+            animate={{ opacity: 1, height: 'auto', scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.96 }}
+            transition={{ duration: 0.35, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="bg-white rounded-3xl p-5 shadow-sm border border-indigo-100 space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
+                  <span className="text-xs font-black text-slate-800 tracking-tight">
+                    {selectedPlayer} 6각형 역대 기록 분석 차트
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                    {isCurrentPlayerGoalie ? 'GK 포지션별 방어율' : '포지션별 성공률'}
+                  </span>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowHexagonModal(false)}
+                  className="text-[11px] font-bold text-slate-400 hover:text-slate-700 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-full transition-colors flex items-center gap-1 cursor-pointer"
+                  title="차트 접기"
+                >
+                  <span>접기</span>
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Dynamic Hexagon Graphic Chart */}
+              <div className="relative flex flex-col items-center justify-center py-1">
+                <svg 
+                  viewBox="0 0 300 290" 
+                  className="w-full max-w-[280px] h-auto overflow-visible select-none"
+                >
+                  <defs>
+                    {/* Radar Fill Gradient */}
+                    <radialGradient id="radarIndigoGradient" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#818CF8" stopOpacity="0.75" />
+                      <stop offset="70%" stopColor="#6366F1" stopOpacity="0.45" />
+                      <stop offset="100%" stopColor="#4F46E5" stopOpacity="0.25" />
+                    </radialGradient>
+                    {/* Outer Shadow */}
+                    <filter id="radarGlow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#4F46E5" floodOpacity="0.3" />
+                    </filter>
+                  </defs>
+
+                  {/* 1. 거미줄 동심 6각형 격자 (0.2 ~ 1.0) */}
+                  {gridLevels.map((level, lvlIdx) => {
+                    const pts = angles.map((ang) => {
+                      const r = R * level;
+                      return `${(cx + r * Math.cos(ang)).toFixed(1)},${(cy + r * Math.sin(ang)).toFixed(1)}`;
+                    }).join(' ');
+
+                    return (
+                      <polygon 
+                        key={lvlIdx}
+                        points={pts}
+                        fill={lvlIdx === gridLevels.length - 1 ? "#F8FAFC" : "none"}
+                        stroke="#E2E8F0"
+                        strokeWidth={lvlIdx === gridLevels.length - 1 ? "1.5" : "1"}
+                        strokeDasharray={lvlIdx < gridLevels.length - 1 ? "3 3" : "none"}
+                      />
+                    );
+                  })}
+
+                  {/* 2. 중심에서 각 꼭짓점으로 뻗는 6개 방사형 축 라인 */}
+                  {angles.map((ang, idx) => {
+                    const ex = cx + R * Math.cos(ang);
+                    const ey = cy + R * Math.sin(ang);
+                    return (
+                      <line 
+                        key={idx}
+                        x1={cx}
+                        y1={cy}
+                        x2={ex}
+                        y2={ey}
+                        stroke="#CBD5E1"
+                        strokeWidth="1.2"
+                      />
+                    );
+                  })}
+
+                  {/* 3. 선수의 실제 데이터 6각형 다각형 영역 (동적 애니메이션) */}
+                  <motion.polygon 
+                    initial={{ opacity: 0, scale: 0.3 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    points={polygonPoints}
+                    fill="url(#radarIndigoGradient)"
+                    stroke="#4F46E5"
+                    strokeWidth="2.5"
+                    filter="url(#radarGlow)"
+                    className="transition-all duration-300"
+                  />
+
+                  {/* 4. 꼭짓점 원형 포인트 마커 및 수치 뱃지 */}
+                  {statsSummary.map((item, idx) => {
+                    const angle = angles[idx];
+                    const radius = R * Math.max(0.18, item.ratio);
+                    const px = cx + radius * Math.cos(angle);
+                    const py = cy + radius * Math.sin(angle);
+
+                    // 라벨 위치 (꼭짓점 바깥쪽으로 오프셋)
+                    const labelDistance = R + 24;
+                    const lx = cx + labelDistance * Math.cos(angle);
+                    const ly = cy + labelDistance * Math.sin(angle);
+
+                    // 정렬 계산
+                    let textAnchor = "middle";
+                    if (Math.cos(angle) > 0.3) textAnchor = "start";
+                    else if (Math.cos(angle) < -0.3) textAnchor = "end";
+
+                    return (
+                      <g key={idx}>
+                        {/* 데이터 포인트 원 */}
+                        <circle 
+                          cx={px} 
+                          cy={py} 
+                          r="4" 
+                          fill="#4F46E5" 
+                          stroke="#FFFFFF" 
+                          strokeWidth="2" 
+                          className="filter drop-shadow-xs"
+                        />
+                        
+                        {/* 축 라벨 및 성공률/방어율 */}
+                        <text 
+                          x={lx} 
+                          y={ly - 4}
+                          textAnchor={textAnchor}
+                          className="text-[11px] font-black fill-slate-800"
+                        >
+                          {item.label}
+                        </text>
+                        <text 
+                          x={lx} 
+                          y={ly + 8}
+                          textAnchor={textAnchor}
+                          className="text-[10px] font-bold fill-indigo-600 font-mono"
+                        >
+                          {item.rate}%
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+
+              {/* Bottom Summary List (첨부 이미지 스타일 스케치북 메모 요약) */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-gray-100 space-y-2 text-left">
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest pb-1 border-b border-gray-200/80 flex items-center justify-between">
+                  <span>{isCurrentPlayerGoalie ? '포지션별 방어 실적 상세' : '포지션별 슈팅 성공률 상세'}</span>
+                  <span className="text-indigo-600 font-bold">{axes.join(' · ')}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-1">
+                  {statsSummary.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs py-0.5">
+                      <span className="font-bold text-slate-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                        <span>{item.label}</span>
+                      </span>
+                      <span className="font-mono font-black text-slate-800">
+                        {item.detail}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  };
+
   // 앱 소스 수정 및 깃허브 배포 시 업데이트 감지 알림 팝업 모달
   const renderUpdatePopup = () => {
     if (!updateAvailable) return null;
@@ -844,14 +1170,96 @@ export default function App() {
     // 상단 기본정보 카드는 중복 없이 1개만 단일 표시 (최근/해당 소속팀 기준)
     const primaryPlayer = matchedPortalPlayers[0] || (playerPortalInfo?.players || [])[0];
 
-    const filteredMatches = selectedPlayerTeam 
-      ? playerHistory.filter(h => isSchoolMatch(h.teamA, selectedPlayerTeam) || isSchoolMatch(h.teamB, selectedPlayerTeam))
-      : playerHistory;
-    const matchesToShow = filteredMatches.length > 0 ? filteredMatches : playerHistory;
-
     const isCurrentPlayerGoalie = selectedPlayerIsGoalie 
       || playerHistory.some(h => h.isGoalie) 
       || (playerPortalInfo?.recentMatchRecords && playerPortalInfo.recentMatchRecords.some((m: any) => m.position === 'GK'));
+
+    // 소속팀 실제 학교명 정규화
+    const activePlayerTeam = selectedPlayerTeam || primaryPlayer?.team || (matchDetail?.homeTeam ? formatSchoolName(matchDetail.homeTeam) : '');
+    
+    // 경기결과상세 화면에서 직접 보고 있던 경기 정보 추출
+    const detailDate = matchDetail?.matchInfo?.match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0]?.replace(/-/g, '.') || '';
+    const hasPlayerInCurrentDetail = Boolean(
+      selectedPlayerDirectRecord ||
+      (matchDetail?.playerRecords && [...(matchDetail.playerRecords.home || []), ...(matchDetail.playerRecords.away || [])].some((p: any) => p.name === selectedPlayer))
+    );
+
+    const currentDetailMatch = (matchDetail && detailDate && hasPlayerInCurrentDetail) ? {
+      date: detailDate,
+      cleanDate: detailDate,
+      tournament: matchDetail.tournament && matchDetail.tournament !== "대회" ? matchDetail.tournament : '대한핸드볼협회 공식대회',
+      teamA: matchDetail.homeTeam || activePlayerTeam,
+      teamB: matchDetail.awayTeam || '',
+      score: matchDetail.totalScore || 'VS',
+      detailUrl: matchDetail.url,
+      hasPlayed: true,
+      isCurrentMatch: true
+    } : null;
+
+    // 서버 KHF 실시간 크롤러(/api/player-history) 및 정적 KHF DB에서 가져온 실제 출전 경기 목록 병합
+    const mergedMap = new Map<string, any>();
+
+    if (playerHistory && playerHistory.length > 0) {
+      playerHistory.forEach((h: any) => {
+        const cleanD = (h.cleanDate || h.date || "").match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0]?.replace(/-/g, '.') || (h.date || "").split(' ')[0];
+        if (!cleanD) return;
+        const key = `${cleanD}_${(h.teamA || '').replace(/\s+/g, '')}_${(h.teamB || '').replace(/\s+/g, '')}`;
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, {
+            ...h,
+            date: cleanD,
+            cleanDate: cleanD,
+            tournament: h.tournament || '대한핸드볼협회 공식대회',
+            teamA: h.teamA || activePlayerTeam,
+            teamB: h.teamB || '',
+            score: h.score || 'VS',
+            detailUrl: h.detailUrl
+          });
+        }
+      });
+    }
+
+    // 현재 열어본 경기결과상세(matchDetail)가 있으면 해당 날짜 경기와 병합하거나 추가
+    if (currentDetailMatch) {
+      let matchedKey: string | null = null;
+      mergedMap.forEach((val, k) => {
+        if (
+          (currentDetailMatch.detailUrl && val.detailUrl === currentDetailMatch.detailUrl) ||
+          (val.cleanDate === currentDetailMatch.cleanDate && (
+            isSchoolMatch(val.teamA, currentDetailMatch.teamA) ||
+            isSchoolMatch(val.teamB, currentDetailMatch.teamB)
+          ))
+        ) {
+          matchedKey = k;
+        }
+      });
+
+      if (matchedKey) {
+        const existing = mergedMap.get(matchedKey);
+        mergedMap.set(matchedKey, {
+          ...existing,
+          tournament: existing.tournament && existing.tournament !== '대회 정보 없음' ? existing.tournament : currentDetailMatch.tournament,
+          teamA: existing.teamA || currentDetailMatch.teamA,
+          teamB: existing.teamB || currentDetailMatch.teamB,
+          score: existing.score && existing.score !== 'VS' ? existing.score : currentDetailMatch.score,
+          detailUrl: existing.detailUrl || currentDetailMatch.detailUrl,
+          isCurrentMatch: true
+        });
+      } else {
+        const cKey = `${currentDetailMatch.cleanDate}_${(currentDetailMatch.teamA || '').replace(/\s+/g, '')}_${(currentDetailMatch.teamB || '').replace(/\s+/g, '')}`;
+        mergedMap.set(cKey, currentDetailMatch);
+      }
+    }
+
+    // 날짜 기준 최신순(내림차순: YYYY.MM.DD) 엄격 정렬
+    const sortedBaseMatches = Array.from(mergedMap.values()).sort((a, b) => {
+      const dA = a.cleanDate || a.date || '';
+      const dB = b.cleanDate || b.date || '';
+      return dB.localeCompare(dA);
+    });
+
+    // 최종 matchesToShow 매핑: KHF 공식 선수 기록을 변형 없이 그대로 표시
+    const matchesToShow = sortedBaseMatches.map((m, idx) => ensureDetailedPlayerStats(m, selectedPlayer, isCurrentPlayerGoalie, idx, sortedBaseMatches));
 
     return (
       <AnimatePresence>
@@ -1157,19 +1565,19 @@ export default function App() {
                                   <>
                                     <div>
                                       <div className="text-[9px] text-gray-400 font-black uppercase">G/S</div>
-                                      <div className="text-xs font-black text-slate-800">{h.gs}</div>
+                                      <div className="text-xs font-black text-slate-800">{h.gs || '0/0'}</div>
                                     </div>
                                     <div>
                                       <div className="text-[9px] text-gray-400 font-black uppercase">성공률</div>
-                                      <div className="text-xs font-black text-slate-800">{h.rate}%</div>
+                                      <div className="text-xs font-black text-slate-800">{h.rate ? (h.rate.toString().includes('%') ? h.rate : `${h.rate}%`) : '0%'}</div>
                                     </div>
                                     <div>
                                       <div className="text-[9px] text-gray-400 font-black uppercase">어시스트</div>
-                                      <div className="text-xs font-black text-indigo-600">{h.as}</div>
+                                      <div className="text-xs font-black text-indigo-600">{h.as || '0'}</div>
                                     </div>
                                     <div>
                                       <div className="text-[9px] text-gray-400 font-black uppercase">스틸</div>
-                                      <div className="text-xs font-black text-indigo-600">{h.st}</div>
+                                      <div className="text-xs font-black text-indigo-600">{h.st || '0'}</div>
                                     </div>
                                   </>
                                 )}
@@ -1248,9 +1656,21 @@ export default function App() {
                             <span className="text-xs font-black tracking-wider text-slate-300">
                               {selectedPlayer} 골키퍼(GK) 역대 통산 기록 요약
                             </span>
-                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950 px-2.5 py-0.5 rounded-full">
-                              총 {totalMatches}경기 출전 통합
-                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowHexagonModal(prev => !prev);
+                              }}
+                              className="text-[10px] font-bold text-indigo-300 bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-700/60 px-2.5 py-1 rounded-full cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-xs"
+                              title="클릭하여 6각형 기록 분석 차트 토글"
+                            >
+                              <span>총 {totalMatches}경기 출전 통합</span>
+                              <span className="text-[9px] bg-indigo-600/80 text-white px-1.5 py-0.2 rounded font-black">
+                                {showHexagonModal ? '⬡ 접기 ▲' : '⬡ 차트보기 ▼'}
+                              </span>
+                            </button>
                           </div>
                           <div className="grid grid-cols-4 gap-2 text-center">
                             <div className="bg-slate-800/80 p-3 rounded-2xl">
@@ -1297,9 +1717,21 @@ export default function App() {
                           <span className="text-xs font-black tracking-wider text-slate-300">
                             {selectedPlayer} 역대 통산 기록 요약
                           </span>
-                          <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950 px-2.5 py-0.5 rounded-full">
-                            총 {totalMatches}경기 출전 통합
-                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setShowHexagonModal(prev => !prev);
+                            }}
+                            className="text-[10px] font-bold text-indigo-300 bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-700/60 px-2.5 py-1 rounded-full cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-xs"
+                            title="클릭하여 6각형 기록 분석 차트 토글"
+                          >
+                            <span>총 {totalMatches}경기 출전 통합</span>
+                            <span className="text-[9px] bg-indigo-600/80 text-white px-1.5 py-0.2 rounded font-black">
+                              {showHexagonModal ? '⬡ 접기 ▲' : '⬡ 차트보기 ▼'}
+                            </span>
+                          </button>
                         </div>
                         <div className="grid grid-cols-4 gap-2 text-center">
                           <div className="bg-slate-800/80 p-3 rounded-2xl">
@@ -1323,6 +1755,9 @@ export default function App() {
                     );
                   })()}
 
+                  {/* 역대 통산 기록 요약과 역대 경기 세부기록 사이의 동적 애니메이션 6각형 그래픽 차트 */}
+                  {renderHexagonSection()}
+
                   {/* 개인 역대 공식 경기 세부 기록 (상대팀열 삭제, 날짜 sticky 고정, 10경기씩 표시) */}
                   {(() => {
                     const pageSize = 10;
@@ -1341,7 +1776,7 @@ export default function App() {
                             </span>
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
-                            날짜를 클릭하면 경기결과 점수가 표시됩니다
+                            날짜를 클릭하면 바로 하단에 대회정보와 최종점수가 펼쳐집니다
                           </span>
                         </div>
 
@@ -1419,58 +1854,91 @@ export default function App() {
                                     const matchDate = h.date ? h.date.split(' ')[0] : '-';
                                     const saveRate = h.rate ? (h.rate.toString().includes('%') ? h.rate : `${h.rate}%`) : '0%';
                                     const svCount = h.sv || (h.gs?.startsWith('SV:') ? h.gs.replace('SV:', '') : (h.shots ? `${h.goals}/${h.shots}` : '0'));
+                                    const isExpanded = expandedCareerDate === (h.date || matchDate);
+                                    const scoreParts = (h.score || "0:0").split(":");
+                                    const scoreA = parseInt(scoreParts[0]) || 0;
+                                    const scoreB = parseInt(scoreParts[1]) || 0;
 
                                     return (
-                                      <tr key={i} className="hover:bg-slate-50 transition-colors group">
-                                        {/* 고정된 날짜 열 (오른쪽으로 스크롤해도 계속 좌측에 표시, 클릭 시 양팀 점수 스코어보드 팝업) */}
-                                        <td 
-                                          className="sticky left-0 bg-white group-hover:bg-slate-50 border border-gray-200 py-2 px-2.5 text-[10px] font-bold text-indigo-600 font-mono z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)] cursor-pointer hover:underline text-center"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                            const scoreParts = (h.score || "0:0").split(":");
-                                            setActiveMatchScorePopup({
-                                              tournament: h.tournament || "공식 핸드볼 경기",
-                                              date: h.date || "",
-                                              teamA: h.teamA || "홈팀",
-                                              teamB: h.teamB || "원정팀",
-                                              score: h.score || "0:0",
-                                              scoreA: scoreParts[0]?.trim() || "0",
-                                              scoreB: scoreParts[1]?.trim() || "0",
-                                              detailUrl: h.detailUrl,
-                                              rect: {
-                                                top: r.top,
-                                                left: r.left,
-                                                bottom: r.bottom,
-                                                right: r.right,
-                                                width: r.width,
-                                                height: r.height,
-                                              }
-                                            });
-                                          }}
-                                          title="클릭하여 경기 결과 점수 보기"
-                                        >
-                                          {matchDate}
-                                        </td>
-                                        <td className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800">{saveRate}</td>
-                                        <td className="border border-gray-200 py-2 px-2 font-bold text-emerald-600">{svCount}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.gkg || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.gkas || h.as || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.wing || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.m6 || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.m9 || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.m7 || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.fb || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.bt || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.high || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.mid || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.low || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.yc || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.m2 || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.rc || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.report || h.dr || '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500">{h.playTime || '00:60:00'}</td>
-                                      </tr>
+                                      <React.Fragment key={i}>
+                                        <tr className={`hover:bg-slate-50 transition-colors group ${isExpanded ? 'bg-indigo-50/30' : ''}`}>
+                                          {/* 고정된 날짜 열 (클릭 시 바로 하단에 펼침화면 토글) */}
+                                          <td 
+                                            className={`sticky left-0 ${isExpanded ? 'bg-indigo-100 text-indigo-800' : 'bg-white group-hover:bg-slate-50 text-indigo-600'} border border-gray-200 py-2 px-2.5 text-[10px] font-bold font-mono z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)] cursor-pointer hover:underline text-center select-none`}
+                                            onClick={() => setExpandedCareerDate(prev => prev === (h.date || matchDate) ? null : (h.date || matchDate))}
+                                            title="클릭하여 바로 하단에 대회정보와 최종점수 펼치기"
+                                          >
+                                            <div className="flex items-center justify-center gap-1">
+                                              <span>{matchDate}</span>
+                                              <span className="text-[9px] text-indigo-400 font-sans">{isExpanded ? '▲' : '▼'}</span>
+                                            </div>
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800">{saveRate}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-bold text-emerald-600">{svCount}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.gkg || '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.gkas || h.as || '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.wing || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m6 || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m9 || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m7 || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.fb || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bt || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.high || '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.mid || '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.low || '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                            {h.yc !== '0' && h.yc ? <span className="w-4 h-4 bg-yellow-400 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.yc}</span> : '0'}
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                            {h.m2 !== '0' && h.m2 ? <span className="w-4 h-4 bg-indigo-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.m2}</span> : '0'}
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                            {h.rc !== '0' && h.rc ? <span className="w-4 h-4 bg-red-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.rc}</span> : '0'}
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-slate-500">{h.report || h.dr || '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500">{h.playTime || '00:60:00'}</td>
+                                        </tr>
+
+                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 상대팀과의 대회정보 및 최종점수 화면 */}
+                                        {isExpanded && (
+                                          <tr className="bg-indigo-50/50 border-b-2 border-indigo-200 animate-in fade-in duration-200">
+                                            <td colSpan={19} className="p-3 text-left">
+                                              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-indigo-100 shadow-xs">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-md">
+                                                    {h.tournament || "공식 전국선수권대회"}
+                                                  </span>
+                                                  <span className="text-xs font-bold text-slate-500 font-mono">
+                                                    {h.date || matchDate}
+                                                  </span>
+                                                </div>
+
+                                                <div className="flex items-center gap-3">
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
+                                                    <span className={`text-sm font-black ${scoreA > scoreB ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[0]?.trim() || '0'}</span>
+                                                    <span className="text-xs font-bold text-slate-300">:</span>
+                                                    <span className={`text-sm font-black ${scoreB > scoreA ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[1]?.trim() || '0'}</span>
+                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamB)}</span>
+                                                  </div>
+                                                  {h.detailUrl && (
+                                                    <button
+                                                      onClick={() => {
+                                                        setActiveDetailTab('compare');
+                                                        fetchDetail(h.detailUrl);
+                                                        setSelectedPlayer(null);
+                                                      }}
+                                                      className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                                                    >
+                                                      경기상세보기 &gt;
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </React.Fragment>
                                     );
                                   })}
                                 </tbody>
@@ -1554,59 +2022,92 @@ export default function App() {
                                     const matchDate = h.date ? h.date.split(' ')[0] : '-';
                                     const shotRate = h.rate ? (h.rate.toString().includes('%') ? h.rate : `${h.rate}%`) : (h.shots && h.shots > 0 ? `${((h.goals / h.shots) * 100).toFixed(1)}%` : '0%');
                                     const gsDisplay = h.gs || `${h.goals || 0}/${h.shots || 0}`;
+                                    const isExpanded = expandedCareerDate === (h.date || matchDate);
+                                    const scoreParts = (h.score || "0:0").split(":");
+                                    const scoreA = parseInt(scoreParts[0]) || 0;
+                                    const scoreB = parseInt(scoreParts[1]) || 0;
 
                                     return (
-                                      <tr key={i} className="hover:bg-slate-50 transition-colors group">
-                                        {/* 고정된 날짜 열 (오른쪽으로 스크롤해도 계속 좌측에 표시, 클릭 시 양팀 점수 스코어보드 팝업) */}
-                                        <td 
-                                          className="sticky left-0 bg-white group-hover:bg-slate-50 border border-gray-200 py-2 px-2.5 text-[10px] font-bold text-indigo-600 font-mono z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)] cursor-pointer hover:underline text-center"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                            const scoreParts = (h.score || "0:0").split(":");
-                                            setActiveMatchScorePopup({
-                                              tournament: h.tournament || "공식 핸드볼 경기",
-                                              date: h.date || "",
-                                              teamA: h.teamA || "홈팀",
-                                              teamB: h.teamB || "원정팀",
-                                              score: h.score || "0:0",
-                                              scoreA: scoreParts[0]?.trim() || "0",
-                                              scoreB: scoreParts[1]?.trim() || "0",
-                                              detailUrl: h.detailUrl,
-                                              rect: {
-                                                top: r.top,
-                                                left: r.left,
-                                                bottom: r.bottom,
-                                                right: r.right,
-                                                width: r.width,
-                                                height: r.height,
-                                              }
-                                            });
-                                          }}
-                                          title="클릭하여 경기 결과 점수 보기"
-                                        >
-                                          {matchDate}
-                                        </td>
-                                        <td className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800">{gsDisplay}</td>
-                                        <td className="border border-gray-200 py-2 px-2 font-bold text-slate-800">{shotRate}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.m6 || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.wing || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.m9 || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.m7 || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.fb || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.bt || '0/0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2 font-medium text-indigo-600">{h.as ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.tf ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.bd ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.bs ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2 font-medium text-emerald-600">{h.st ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2">{h.rb ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.yc ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.m2 ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.rc ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-1.5">{h.report ?? h.dr ?? '0'}</td>
-                                        <td className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500">{h.playTime || '00:60:00'}</td>
-                                      </tr>
+                                      <React.Fragment key={i}>
+                                        <tr className={`hover:bg-slate-50 transition-colors group ${isExpanded ? 'bg-indigo-50/30' : ''}`}>
+                                          {/* 고정된 날짜 열 (클릭 시 바로 하단에 펼침화면 토글) */}
+                                          <td 
+                                            className={`sticky left-0 ${isExpanded ? 'bg-indigo-100 text-indigo-800' : 'bg-white group-hover:bg-slate-50 text-indigo-600'} border border-gray-200 py-2 px-2.5 text-[10px] font-bold font-mono z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)] cursor-pointer hover:underline text-center select-none`}
+                                            onClick={() => setExpandedCareerDate(prev => prev === (h.date || matchDate) ? null : (h.date || matchDate))}
+                                            title="클릭하여 바로 하단에 대회정보와 최종점수 펼치기"
+                                          >
+                                            <div className="flex items-center justify-center gap-1">
+                                              <span>{matchDate}</span>
+                                              <span className="text-[9px] text-indigo-400 font-sans">{isExpanded ? '▲' : '▼'}</span>
+                                            </div>
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-2.5 font-bold text-slate-800">{gsDisplay}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-bold text-slate-800">{shotRate}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m6 || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.wing || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m9 || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.m7 || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.fb || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bt || '0/0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.as ?? '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.tf ?? '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bd ?? '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.bs ?? '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-bold text-indigo-600 bg-indigo-50/20">{h.st ?? '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 text-slate-600">{h.rb ?? '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                            {h.yc !== '0' && h.yc ? <span className="w-4 h-4 bg-yellow-400 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.yc}</span> : '0'}
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                            {h.m2 !== '0' && h.m2 ? <span className="w-4 h-4 bg-indigo-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.m2}</span> : '0'}
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-center">
+                                            {h.rc !== '0' && h.rc ? <span className="w-4 h-4 bg-red-500 rounded-xs inline-flex items-center justify-center text-[9px] text-white font-black">{h.rc}</span> : '0'}
+                                          </td>
+                                          <td className="border border-gray-200 py-2 px-1.5 text-slate-500">{h.report ?? h.dr ?? '0'}</td>
+                                          <td className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500">{h.playTime || '00:60:00'}</td>
+                                        </tr>
+
+                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 상대팀과의 대회정보 및 최종점수 화면 */}
+                                        {isExpanded && (
+                                          <tr className="bg-indigo-50/50 border-b-2 border-indigo-200 animate-in fade-in duration-200">
+                                            <td colSpan={20} className="p-3 text-left">
+                                              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-indigo-100 shadow-xs">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-md">
+                                                    {h.tournament || "공식 전국선수권대회"}
+                                                  </span>
+                                                  <span className="text-xs font-bold text-slate-500 font-mono">
+                                                    {h.date || matchDate}
+                                                  </span>
+                                                </div>
+
+                                                <div className="flex items-center gap-3">
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
+                                                    <span className={`text-sm font-black ${scoreA > scoreB ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[0]?.trim() || '0'}</span>
+                                                    <span className="text-xs font-bold text-slate-300">:</span>
+                                                    <span className={`text-sm font-black ${scoreB > scoreA ? 'text-red-600' : 'text-slate-700'}`}>{scoreParts[1]?.trim() || '0'}</span>
+                                                    <span className="text-xs font-black text-slate-800">{formatSchoolName(h.teamB)}</span>
+                                                  </div>
+                                                  {h.detailUrl && (
+                                                    <button
+                                                      onClick={() => {
+                                                        setActiveDetailTab('compare');
+                                                        fetchDetail(h.detailUrl);
+                                                        setSelectedPlayer(null);
+                                                      }}
+                                                      className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                                                    >
+                                                      경기상세보기 &gt;
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </React.Fragment>
                                     );
                                   })}
                                 </tbody>
@@ -1625,10 +2126,11 @@ export default function App() {
                             <button
                               onClick={() => setCareerPage(prev => Math.max(1, prev - 1))}
                               disabled={currentPage === 1}
-                              className="p-2 rounded-xl border border-gray-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                              title="이전 10경기"
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors cursor-pointer"
+                              title="이전 10게임"
                             >
                               <ChevronLeft className="w-4 h-4" />
+                              <span className="hidden sm:inline">이전 10게임</span>
                             </button>
                             
                             <div className="flex items-center gap-1.5">
@@ -1636,7 +2138,7 @@ export default function App() {
                                 <button
                                   key={pg}
                                   onClick={() => setCareerPage(pg)}
-                                  className={`min-w-[32px] h-8 px-2 text-xs font-black rounded-xl transition-all ${
+                                  className={`min-w-[32px] h-8 px-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
                                     currentPage === pg 
                                       ? 'bg-indigo-600 text-white shadow-xs' 
                                       : 'bg-gray-50 text-slate-600 hover:bg-gray-100 border border-gray-200'
@@ -1650,9 +2152,10 @@ export default function App() {
                             <button
                               onClick={() => setCareerPage(prev => Math.min(totalPages, prev + 1))}
                               disabled={currentPage === totalPages}
-                              className="p-2 rounded-xl border border-gray-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                              title="다음 10경기"
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors cursor-pointer"
+                              title="다음 10게임"
                             >
+                              <span className="hidden sm:inline">다음 10게임</span>
                               <ChevronRight className="w-4 h-4" />
                             </button>
                           </div>
@@ -1723,7 +2226,60 @@ export default function App() {
   const getCacheKey = (y: string, m: string) => `handball_schedule_v18_${y}_${m}`;
   const getSavedKey = (y: string, m: string) => `handball_saved_v18_${y}_${m}`;
 
+  const staticKhfDbRef = useRef<any>(null);
+  const loadStaticKhfDb = async () => {
+    if (staticKhfDbRef.current) return staticKhfDbRef.current;
+    try {
+      const res = await axios.get(`./khf-static-db.json`, { timeout: 20000 });
+      if (res.data && (res.data.matchRecords || res.data.schedules)) {
+        staticKhfDbRef.current = res.data;
+        return res.data;
+      }
+    } catch (e) {
+      // ignore static DB load notice
+    }
+    return null;
+  };
+
   const fetchScheduleFallback = async (y: string, m: string): Promise<ScheduleData | null> => {
+    // 1. 정적 KHF DB (GitHub Pages / Vercel 정적 배포 환경 100% 호환) 우선 확인
+    const staticDb = await loadStaticKhfDb();
+    if (staticDb?.schedules?.[y]) {
+      const yearSchedules: any[] = staticDb.schedules[y] || [];
+      const monthPadded = m !== 'ALL' ? m.padStart(2, '0') : 'ALL';
+      const filtered = yearSchedules.filter((item: any) => {
+        if (monthPadded === 'ALL') return true;
+        const d = item.cleanDate || item.date || '';
+        return d.includes(`.${monthPadded}.`) || d.includes(`-${monthPadded}-`);
+      });
+
+      const mappedMatches: Match[] = filtered.map((item: any) => {
+        const id = item.detailUrl
+          ? new URLSearchParams(item.detailUrl.split('?')[1]).get('GAME_CD') || Math.random().toString(36).substring(2, 11)
+          : Math.random().toString(36).substring(2, 11);
+        return {
+          id,
+          date: `${item.date || item.cleanDate} ${item.time || ''}`.trim(),
+          tournament: item.tournament || '대한핸드볼협회 공식대회',
+          teamA: item.teamA,
+          teamB: item.teamB,
+          score: item.score || 'VS',
+          category: item.group && item.group !== '-' ? `${item.category || '기타'} - ${item.group}` : (item.category || '기타'),
+          venue: item.venue || '',
+          detailUrl: item.detailUrl || null
+        };
+      });
+
+      const uniqueMatches = Array.from(new Map(mappedMatches.map(item => [`${item.teamA}-${item.teamB}-${item.date}`, item])).values());
+      uniqueMatches.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+      return {
+        tournamentName: filtered[0]?.tournament || '조회된 대회 없음',
+        matches: uniqueMatches
+      };
+    }
+
+    // 2. 외부 프록시 폴백
     const targetUrl = `https://khf.handballkorea.com/competition/schedule_list.php?SEASON_ID=${y}&DS_MONTH=${m}&GROUP_CD=`;
     const proxyUrls = [
       `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
@@ -1791,6 +2347,7 @@ export default function App() {
               matches.push({
                 id,
                 date: `${currentDate} ${time}`.trim(),
+                tournament: currentTournament,
                 teamA,
                 teamB,
                 score: score || "VS",
@@ -1854,7 +2411,7 @@ export default function App() {
         console.warn("API route failed, trying client-side fallback proxy...", apiErr);
       }
 
-      // If backend API returned empty or failed (such as on Vercel static or blocked IP)
+      // If backend API returned empty or failed (such as on GitHub Pages static or blocked IP)
       if (!fetchedData || !fetchedData.matches || fetchedData.matches.length === 0) {
         const fallbackData = await fetchScheduleFallback(y, m);
         if (fallbackData) {
@@ -1877,13 +2434,12 @@ export default function App() {
     if (data) {
       const savedKey = getSavedKey(year, month);
       localStorage.setItem(savedKey, JSON.stringify(data));
-      // Simple feedback: could be a state but I'll avoid adding unrequested state for now
     }
   };
 
   const fetchDetail = async (url: string) => {
     window.history.pushState({ modal: 'matchDetail' }, '');
-    const cacheKey = `match_detail_${url}`;
+    const cacheKey = `match_detail_v2_${url}`;
     const cached = localStorage.getItem(cacheKey);
 
     if (cached) {
@@ -1894,16 +2450,141 @@ export default function App() {
     setDetailLoading(true);
     try {
       const response = await axios.get(`/api/match-detail?url=${encodeURIComponent(url)}`);
-      setMatchDetail(response.data);
-      localStorage.setItem(cacheKey, JSON.stringify(response.data));
+      const detailWithUrl = { ...response.data, url };
+      setMatchDetail(detailWithUrl);
+      localStorage.setItem(cacheKey, JSON.stringify(detailWithUrl));
     } catch (error) {
-      console.error("Error fetching detail:", error);
+      console.warn("API match-detail failed, checking static KHF DB:", error);
+      const staticDb = await loadStaticKhfDb();
+      const staticMatch = staticDb?.matchRecords?.[url];
+      if (staticMatch) {
+        const fallbackDetail = {
+          url,
+          tournament: staticMatch.tournament || '대한핸드볼협회 공식대회',
+          matchInfo: staticMatch.fullDate || staticMatch.date || '',
+          homeTeam: staticMatch.teamA || '',
+          awayTeam: staticMatch.teamB || '',
+          totalScore: staticMatch.score || 'VS',
+          periodScores: [],
+          homeIcons: {},
+          awayIcons: {},
+          tableStats: [],
+          playerRecords: staticMatch.playerRecords || { home: [], away: [] },
+          compareBars: [],
+          group: staticMatch.group || ''
+        };
+        setMatchDetail(fallbackDetail);
+        localStorage.setItem(cacheKey, JSON.stringify(fallbackDetail));
+      }
     } finally {
       setDetailLoading(false);
     }
   };
 
-  const fetchPlayerHistory = async (playerName: string, teamName?: string, isRefetch = false, isGoalie = false) => {
+  // 구버전(v1~v98) 오염/복제 캐시 일괄 삭제 함수 (v99 업그레이드)
+  const cleanupOldPlayerCaches = () => {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('player_saved_') || k.startsWith('player_history_')) && !k.includes('_v99_')) {
+          keysToRemove.push(k);
+        } else if (k && k.startsWith('match_detail_') && !k.startsWith('match_detail_v2_')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch (e) {}
+  };
+
+  // 선수 경기 기록 헬퍼 함수: KHF 공식 실기록(detail_player_record_new.php)을 왜곡/덮어쓰기 없이 그대로 반환
+  const ensureDetailedPlayerStats = (m: any, pName: string, isGoalie: boolean, _matchIdx?: number, _allList?: any[]) => {
+    const detailDate = matchDetail?.matchInfo?.match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0]?.replace(/-/g, '.') || '';
+    const mDate = (m.cleanDate || m.date || '').match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0]?.replace(/-/g, '.') || '';
+
+    const isSameMatchAsDetail = Boolean(
+      m.isCurrentMatch ||
+      (m.detailUrl && matchDetail?.url && m.detailUrl === matchDetail.url) ||
+      (detailDate && mDate && detailDate === mDate && matchDetail && (
+        isSchoolMatch(m.teamA, matchDetail.homeTeam) ||
+        isSchoolMatch(m.teamB, matchDetail.awayTeam)
+      ))
+    );
+
+    const directRecord = isSameMatchAsDetail ? (
+      selectedPlayerDirectRecord || 
+      (matchDetail?.playerRecords ? [...(matchDetail.playerRecords.home || []), ...(matchDetail.playerRecords.away || [])].find(p => p.name === pName) : null)
+    ) : null;
+
+    if (isSameMatchAsDetail && directRecord && (!m.gs || m.isCurrentMatch)) {
+      const isDirectGoalie = Boolean(directRecord.isGoalie ?? isGoalie);
+      return {
+        ...m,
+        isGoalie: isDirectGoalie,
+        gs: directRecord.gs || (isDirectGoalie ? `SV:${directRecord.sv || '0'}` : '0/0'),
+        rate: directRecord.rate ? (directRecord.rate.toString().includes('%') ? directRecord.rate : `${directRecord.rate}%`) : '0%',
+        m6: directRecord.m6 || '0/0',
+        wing: directRecord.wing || '0/0',
+        m9: directRecord.m9 || '0/0',
+        m7: directRecord.m7 || '0/0',
+        fb: directRecord.fb || '0/0',
+        bt: directRecord.bt || '0/0',
+        as: directRecord.as ?? '0',
+        tf: directRecord.tf ?? '0',
+        bd: directRecord.bd ?? '0',
+        bs: directRecord.bs ?? '0',
+        st: directRecord.st ?? '0',
+        rb: directRecord.rb ?? '0',
+        yc: directRecord.yc ?? '0',
+        m2: directRecord.m2 ?? '0',
+        rc: directRecord.rc ?? '0',
+        report: directRecord.report ?? directRecord.dr ?? '0',
+        dr: directRecord.dr ?? directRecord.report ?? '0',
+        playTime: directRecord.playTime || '00:00:00',
+        sv: directRecord.sv || (directRecord.gs?.startsWith('SV:') ? directRecord.gs.replace('SV:', '') : '0'),
+        gkg: directRecord.gkg ?? '0',
+        gkas: directRecord.gkas ?? directRecord.as ?? '0',
+        high: directRecord.high || '0/0',
+        mid: directRecord.mid || '0/0',
+        low: directRecord.low || '0/0'
+      };
+    }
+
+    const isMatchGoalie = Boolean(m.isGoalie ?? isGoalie);
+    return {
+      ...m,
+      isGoalie: isMatchGoalie,
+      gs: m.gs || (isMatchGoalie ? `SV:${m.sv || '0'}` : '0/0'),
+      rate: m.rate ? (m.rate.toString().includes('%') ? m.rate : `${m.rate}%`) : '0%',
+      m6: m.m6 || '0/0',
+      wing: m.wing || '0/0',
+      m9: m.m9 || '0/0',
+      m7: m.m7 || '0/0',
+      fb: m.fb || '0/0',
+      bt: m.bt || '0/0',
+      as: m.as ?? '0',
+      tf: m.tf ?? '0',
+      bd: m.bd ?? '0',
+      bs: m.bs ?? '0',
+      st: m.st ?? '0',
+      rb: m.rb ?? '0',
+      yc: m.yc ?? '0',
+      m2: m.m2 ?? '0',
+      rc: m.rc ?? '0',
+      report: m.report ?? m.dr ?? '0',
+      dr: m.dr ?? m.report ?? '0',
+      playTime: m.playTime || '00:00:00',
+      sv: m.sv || (m.gs?.startsWith('SV:') ? m.gs.replace('SV:', '') : '0'),
+      gkg: m.gkg ?? '0',
+      gkas: m.gkas ?? m.as ?? '0',
+      high: m.high || '0/0',
+      mid: m.mid || '0/0',
+      low: m.low || '0/0'
+    };
+  };
+
+  const fetchPlayerHistory = async (playerName: string, teamName?: string, isRefetch = false, isGoalie = false, directRecord?: any) => {
     if (!selectedPlayer) {
       window.history.pushState({ modal: 'player' }, '');
     }
@@ -1912,124 +2593,153 @@ export default function App() {
     setSelectedPlayerIsGoalie(isGoalie);
     setCareerPage(1); // 1페이지로 리셋
     
+    // 경기결과상세 선수기록탭 리스트의 정확한 직접 데이터 저장
+    if (directRecord) {
+      setSelectedPlayerDirectRecord(directRecord);
+    } else if (matchDetail?.playerRecords) {
+      const allPlayers = [...(matchDetail.playerRecords.home || []), ...(matchDetail.playerRecords.away || [])];
+      const foundInCurrent = allPlayers.find(p => p.name === playerName);
+      if (foundInCurrent) {
+        setSelectedPlayerDirectRecord(foundInCurrent);
+      } else {
+        setSelectedPlayerDirectRecord(null);
+      }
+    } else {
+      setSelectedPlayerDirectRecord(null);
+    }
+    
+    // 구버전 오염 캐시 일괄 청소
+    cleanupOldPlayerCaches();
+
     // 포털 정보 및 구글링 실적 정보도 함께 로드
     fetchPlayerPortalInfo(playerName, teamName, isRefetch);
     fetchPlayerExtraRecords(playerName, teamName, isRefetch);
     
-    const savedKey = `player_saved_v18_${playerName}_${teamName || 'all'}`;
-    const cacheKey = `player_history_v18_${playerName}_${teamName || 'all'}`;
+    // 캐시 키를 v99로 올려 구버전 오류/중복 데이터 캐시 완전 무효화
+    const savedKey = `player_saved_v99_${playerName}_${teamName || 'all'}`;
+    const cacheKey = `player_history_v99_${playerName}_${teamName || 'all'}`;
 
     if (!isRefetch) {
       const saved = localStorage.getItem(savedKey);
       if (saved) {
-        setPlayerHistory(JSON.parse(saved));
-        return;
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const hydrated = parsed
+              .map((m: any, idx: number) => ensureDetailedPlayerStats(m, playerName, isGoalie, idx, parsed))
+              .sort((a: any, b: any) => (b.cleanDate || b.date || '').localeCompare(a.cleanDate || a.date || ''));
+            setPlayerHistory(hydrated);
+            return;
+          }
+        } catch (e) {}
       }
 
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
-        setPlayerHistory(JSON.parse(cached));
-        return;
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const hydrated = parsed
+              .map((m: any, idx: number) => ensureDetailedPlayerStats(m, playerName, isGoalie, idx, parsed))
+              .sort((a: any, b: any) => (b.cleanDate || b.date || '').localeCompare(a.cleanDate || a.date || ''));
+            setPlayerHistory(hydrated);
+            return;
+          }
+        } catch (e) {}
       }
     }
 
     setPlayerLoading(true);
     setPlayerHistory([]);
     try {
-      const url = `/api/player-history?name=${encodeURIComponent(playerName)}${teamName ? `&team=${encodeURIComponent(teamName)}` : ''}${isGoalie ? '&isGoalie=true' : ''}`;
-      const response = await axios.get(url);
-      const history = response.data.history || [];
-      if (history.length > 0) {
-        setPlayerHistory(history);
-        localStorage.setItem(cacheKey, JSON.stringify(history));
-      } else {
-        throw new Error("No player history from API");
+      let rawHistory: any[] = [];
+      try {
+        const url = `/api/player-history?name=${encodeURIComponent(playerName)}${teamName ? `&team=${encodeURIComponent(teamName)}` : ''}${isGoalie ? '&isGoalie=true' : ''}`;
+        const response = await axios.get(url, { timeout: 20000 });
+        rawHistory = response.data?.history || [];
+      } catch (apiErr) {
+        console.warn("API /api/player-history unreachable, using static KHF DB:", apiErr);
+      }
+
+      // GitHub Pages 등 정적 호스팅 환경이거나 API 결과가 비어있을 때 정적 KHF DB에서 조회
+      if (!rawHistory || rawHistory.length === 0) {
+        const staticDb = await loadStaticKhfDb();
+        if (staticDb?.matchRecords) {
+          const cleanSchoolStem = (s: string) => s
+            .replace(/\s+/g, '')
+            .replace(/\(남\)|\(여\)|\(남고\)|\(여고\)|\(남중\)|\(여중\)|\(남초\)|\(여초\)/g, '')
+            .replace(/(고등학교|중학교|초등학교|대학교|고|중|초|대)$/g, '');
+          const targetStem = teamName ? cleanSchoolStem(teamName) : '';
+          const isTeamRelated = (candTeam: string) => {
+            if (!teamName) return true;
+            if (isSchoolMatch(candTeam, teamName)) return true;
+            const candStem = cleanSchoolStem(candTeam);
+            if (targetStem && candStem && targetStem.length >= 2 && targetStem === candStem) return true;
+            return false;
+          };
+
+          const staticMatches: any[] = [];
+          Object.entries(staticDb.matchRecords).forEach(([detailUrl, rec]: [string, any]) => {
+            const homeMatch = isTeamRelated(rec.teamA);
+            const awayMatch = isTeamRelated(rec.teamB);
+            if (!homeMatch && !awayMatch) return;
+
+            let foundPlayer: any = null;
+            if (homeMatch && rec.playerRecords?.home) {
+              foundPlayer = rec.playerRecords.home.find((p: any) => p.name === playerName);
+            }
+            if (!foundPlayer && awayMatch && rec.playerRecords?.away) {
+              foundPlayer = rec.playerRecords.away.find((p: any) => p.name === playerName);
+            }
+
+            if (foundPlayer) {
+              const cleanDate = (rec.date || '').match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0]?.replace(/-/g, '.') || rec.date || '';
+              staticMatches.push({
+                date: cleanDate,
+                cleanDate,
+                fullDate: rec.fullDate || cleanDate,
+                tournament: rec.tournament || '대한핸드볼협회 공식대회',
+                teamA: rec.teamA,
+                teamB: rec.teamB,
+                score: rec.score || 'VS',
+                detailUrl,
+                ...foundPlayer,
+                rate: (foundPlayer.rate || '0').replace('%', ''),
+                hasPlayed: true
+              });
+            }
+          });
+
+          rawHistory = staticMatches;
+        }
+      }
+      
+      // 중복 경기 엄격 제거 (날짜 + 팀명) 및 최신순(내림차순) 정렬
+      const seenApiKeys = new Set<string>();
+      const dedupedHistory: any[] = [];
+      rawHistory.forEach((m: any) => {
+        const cleanDate = (m.cleanDate || m.date || "").match(/\d{4}[.-]\d{2}[.-]\d{2}/)?.[0]?.replace(/-/g, '.') || m.date || "";
+        const cleanTeams = `${m.teamA || ''}_${m.teamB || ''}`.replace(/\s+/g, '');
+        const key = `${cleanDate}_${cleanTeams}`;
+        if (cleanDate && !seenApiKeys.has(key)) {
+          seenApiKeys.add(key);
+          dedupedHistory.push({
+            ...m,
+            date: cleanDate,
+            cleanDate
+          });
+        }
+      });
+
+      dedupedHistory.sort((a, b) => (b.cleanDate || '').localeCompare(a.cleanDate || ''));
+
+      if (dedupedHistory.length > 0) {
+        const enriched = dedupedHistory.map((m: any, idx: number) => ensureDetailedPlayerStats(m, playerName, isGoalie, idx, dedupedHistory));
+        setPlayerHistory(enriched);
+        localStorage.setItem(cacheKey, JSON.stringify(enriched));
       }
     } catch (error) {
-      console.warn("Player history API route error, using tournament matches fallback:", error);
-      if (data?.matches) {
-        const schoolMatches = data.matches.filter(m => 
-          !teamName || isSchoolMatch(m.teamA, teamName) || isSchoolMatch(m.teamB, teamName)
-        );
-        
-        // 10경기 이상 페이지네이션 및 통산 집계를 위해 최소 15경기 이상의 풍부한 역대 경기 리스트 확보
-        let matchPool: any[] = [...schoolMatches];
-        if (matchPool.length < 15) {
-          const others = data.matches.filter(m => !matchPool.some(sm => sm.id === m.id));
-          matchPool = [...matchPool, ...others];
-        }
-        if (matchPool.length < 15) {
-          // 추가 과거 대회 경기 보충
-          const pastTournaments = [
-            "2026 핸드볼코리아 전국중고선수권대회",
-            "2025 대한핸드볼협회장배 전국중고선수권대회",
-            "2025 전국체육대회(핸드볼)",
-            "2025 협회장배 초중고 핸드볼대회",
-            "2024 태백산기 전국종합핸드볼대회",
-            "2024 전국소년체육대회(핸드볼)",
-            "2024 핸드볼코리아 페스티벌"
-          ];
-          let counter = matchPool.length;
-          while (matchPool.length < 16) {
-            const tName = pastTournaments[counter % pastTournaments.length];
-            const baseDate = new Date(2025, 11 - (counter % 12), 20 - (counter % 15));
-            const dateStr = `${baseDate.getFullYear()}.${String(baseDate.getMonth() + 1).padStart(2, '0')}.${String(baseDate.getDate()).padStart(2, '0')}`;
-            matchPool.push({
-              tournament: tName,
-              date: dateStr,
-              teamA: teamName || "홈팀",
-              teamB: counter % 2 === 0 ? "경희대" : "원광대",
-              score: `${22 + (counter % 7)} : ${20 + (counter % 6)}`,
-              detailUrl: null
-            });
-            counter++;
-          }
-        }
-
-        const generated = matchPool.slice(0, 18).map((m, idx) => {
-          const goals = idx === 0 ? 6 : Math.max(2, (idx * 3 + 5) % 9);
-          const shots = Math.max(goals, goals + (idx % 5) + 2);
-          const successRate = ((goals / shots) * 100).toFixed(1);
-          
-          return {
-            tournament: m.tournament || data.tournamentName || "대한핸드볼협회장배 전국선수권대회",
-            date: m.date,
-            teamA: m.teamA,
-            teamB: m.teamB,
-            score: m.score,
-            detailUrl: m.detailUrl,
-            isGoalie,
-            rate: isGoalie ? `${(24.5 + (idx % 6) * 2.1).toFixed(1)}%` : `${successRate}%`,
-            sv: isGoalie ? `${6 + (idx % 7)}` : "0",
-            gkg: "0",
-            gkas: isGoalie ? `${idx % 2}` : "0",
-            wing: isGoalie ? `${(15 + (idx % 4) * 5)}%` : `${Math.floor(goals * 0.2)}/${Math.floor(shots * 0.2)}`,
-            m6: isGoalie ? `${(30 + (idx % 5) * 4)}%` : `${Math.floor(goals * 0.3)}/${Math.floor(shots * 0.3)}`,
-            m9: isGoalie ? `${(20 + (idx % 4) * 3)}%` : `${Math.floor(goals * 0.4)}/${Math.floor(shots * 0.4)}`,
-            m7: isGoalie ? `${(40 + (idx % 3) * 10)}%` : `${idx % 3 === 0 ? '1/1' : '0/0'}`,
-            fb: isGoalie ? "0%" : `${idx % 2 === 0 ? '1/2' : '0/1'}`,
-            bt: isGoalie ? "0%" : `${idx % 3 === 0 ? '1/2' : '0/0'}`,
-            high: isGoalie ? "30%" : "-",
-            mid: isGoalie ? "25%" : "-",
-            low: isGoalie ? "28%" : "-",
-            gs: isGoalie ? `SV:${6 + (idx % 7)}` : `${goals}/${shots}`,
-            as: isGoalie ? `${idx % 2}` : `${2 + (idx % 5)}`,
-            tf: isGoalie ? "0" : `${1 + (idx % 3)}`,
-            bd: isGoalie ? "0" : `${idx % 2}`,
-            bs: isGoalie ? "0" : `${idx % 2}`,
-            st: isGoalie ? "0" : `${1 + (idx % 2)}`,
-            rb: isGoalie ? "0" : `${1 + (idx % 3)}`,
-            yc: idx % 4 === 0 ? "1" : "0",
-            m2: idx % 5 === 0 ? "1" : "0",
-            rc: "0",
-            report: "0",
-            dr: "0",
-            playTime: "00:60:00"
-          };
-        });
-        setPlayerHistory(generated);
-        localStorage.setItem(cacheKey, JSON.stringify(generated));
-      }
+      console.warn("Player history load error:", error);
     } finally {
       setPlayerLoading(false);
     }
@@ -2037,7 +2747,7 @@ export default function App() {
 
   const handlePlayerSave = () => {
     if (selectedPlayer && playerHistory.length > 0) {
-      const savedKey = `player_saved_v18_${selectedPlayer}_${selectedPlayerTeam || 'all'}`;
+      const savedKey = `player_saved_v99_${selectedPlayer}_${selectedPlayerTeam || 'all'}`;
       localStorage.setItem(savedKey, JSON.stringify(playerHistory));
     }
   };
@@ -2787,7 +3497,7 @@ export default function App() {
                                         <td className="border border-gray-200 px-2 py-2 text-center text-slate-600 font-bold">{p.no}</td>
                                         <td className="border border-gray-200 px-3 py-2 text-center font-black text-indigo-600 whitespace-nowrap">
                                           <button 
-                                            onClick={() => fetchPlayerHistory(p.name, t.name, false, false)}
+                                            onClick={() => fetchPlayerHistory(p.name, t.name, false, false, p)}
                                             className="hover:underline font-black cursor-pointer"
                                           >
                                             {p.name}
@@ -2867,7 +3577,7 @@ export default function App() {
                                           <td className="border border-gray-200 px-2 py-2 text-center text-slate-600 font-bold">{p.no}</td>
                                           <td className="border border-gray-200 px-3 py-2 text-center font-black text-indigo-600 whitespace-nowrap">
                                             <button 
-                                              onClick={() => fetchPlayerHistory(p.name, t.name, false, true)}
+                                              onClick={() => fetchPlayerHistory(p.name, t.name, false, true, p)}
                                               className="hover:underline font-black cursor-pointer"
                                             >
                                               {p.name}

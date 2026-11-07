@@ -165,16 +165,34 @@ export default async function handler(req: any, res: any) {
             
             if (statsTds.length > 0) {
               if (isGoalieTable) {
+                const svVal = statsTds.eq(1).text().trim() || "0";
                 players.push({
                   no,
                   name,
                   isGoalie: true,
-                  rate: statsTds.eq(0).text().trim(),
-                  gs: statsTds.eq(1).text().trim(),
-                  as: statsTds.eq(2).text().trim(),
-                  tf: statsTds.eq(3).text().trim(),
-                  st: statsTds.eq(4).text().trim(),
-                  playTime: statsTds.eq(5).text().trim(),
+                  rate: statsTds.eq(0).text().trim() || "0%",
+                  sv: svVal,
+                  gs: `SV:${svVal}`,
+                  gkg: statsTds.length > 2 ? statsTds.eq(2).text().trim() : "0",
+                  gkas: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
+                  as: statsTds.length > 3 ? statsTds.eq(3).text().trim() : "0",
+                  wing: statsTds.length > 4 ? statsTds.eq(4).text().trim() : "0/0",
+                  m6: statsTds.length > 5 ? statsTds.eq(5).text().trim() : "0/0",
+                  m9: statsTds.length > 6 ? statsTds.eq(6).text().trim() : "0/0",
+                  m7: statsTds.length > 7 ? statsTds.eq(7).text().trim() : "0/0",
+                  fb: statsTds.length > 8 ? statsTds.eq(8).text().trim() : "0/0",
+                  bt: statsTds.length > 9 ? statsTds.eq(9).text().trim() : "0/0",
+                  high: statsTds.length > 10 ? statsTds.eq(10).text().trim() : "0/0",
+                  mid: statsTds.length > 11 ? statsTds.eq(11).text().trim() : "0/0",
+                  low: statsTds.length > 12 ? statsTds.eq(12).text().trim() : "0/0",
+                  tf: "0",
+                  st: "0",
+                  yc: statsTds.length > 13 ? statsTds.eq(13).text().trim() : "0",
+                  m2: statsTds.length > 14 ? statsTds.eq(14).text().trim() : "0",
+                  rc: statsTds.length > 15 ? statsTds.eq(15).text().trim() : "0",
+                  report: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                  dr: statsTds.length > 16 ? statsTds.eq(16).text().trim() : "0",
+                  playTime: statsTds.length > 17 ? statsTds.eq(17).text().trim() : "00:00:00",
                 });
               } else {
                 players.push({ 
@@ -194,10 +212,12 @@ export default async function handler(req: any, res: any) {
                   bd: statsTds.eq(10).text().trim(),
                   bs: statsTds.eq(11).text().trim(),
                   st: statsTds.eq(12).text().trim(),
+                  rb: statsTds.eq(13).text().trim(),
                   yc: statsTds.eq(14).text().trim(),
                   m2: statsTds.eq(15).text().trim(),
                   rc: statsTds.eq(16).text().trim(),
                   report: statsTds.eq(17).text().trim(),
+                  dr: statsTds.eq(17).text().trim(),
                   playTime: statsTds.eq(18).text().trim()
                 });
               }
