@@ -839,48 +839,110 @@ export default function App() {
     let fAs = 0, fTf = 0, fBd = 0, fBs = 0, fSt = 0, fRb = 0;
     let fYc = 0, fM2 = 0, fRc = 0, fDr = 0;
 
+    // 골키퍼 전용 필드 파서: 분수(sv/sh) 또는 백분율(rate%) 또는 단일 정수 지원
+    type GoaliePosStat = { sv: number; sh: number; rateSum: number; count: number; hasFraction: boolean };
+    const createPosStat = (): GoaliePosStat => ({ sv: 0, sh: 0, rateSum: 0, count: 0, hasFraction: false });
+
+    const parseGoalieField = (val: any) => {
+      if (!val) return null;
+      const str = String(val).trim();
+      if (!str || str === '-' || str === '0/0') return null;
+      if (str.includes('/')) {
+        const parts = str.split('/');
+        const sv = parseInt(parts[0]) || 0;
+        const sh = parseInt(parts[1]) || 0;
+        const rate = sh > 0 ? (sv / sh) * 100 : 0;
+        return { sv, sh, rate, hasFraction: true };
+      }
+      if (str.includes('%')) {
+        const num = parseFloat(str.replace('%', ''));
+        if (!isNaN(num) && num >= 0) {
+          return { sv: 0, sh: 0, rate: num, hasFraction: false };
+        }
+      }
+      const num = parseInt(str);
+      if (!isNaN(num) && num >= 0) {
+        return { sv: num, sh: 0, rate: 0, hasFraction: false };
+      }
+      return null;
+    };
+
+    const addPosStat = (stat: GoaliePosStat, parsed: ReturnType<typeof parseGoalieField>) => {
+      if (!parsed) return;
+      if (parsed.hasFraction) {
+        stat.sv += parsed.sv;
+        stat.sh += parsed.sh;
+        stat.hasFraction = true;
+        stat.rateSum += parsed.rate;
+        stat.count++;
+      } else {
+        stat.rateSum += parsed.rate;
+        stat.count++;
+      }
+    };
+
     // 골키퍼 누적 변수
-    let gSv = 0, gSvSh = 0;
+    let gTotalRateSum = 0;
+    let gTotalRateCount = 0;
+    let gTotalSv = 0;
+    let gTotalSvSh = 0;
+    let gHasSvShFraction = false;
     let gGkg = 0, gGkas = 0;
-    let gWingSv = 0, gWingSh = 0;
-    let g6mSv = 0, g6mSh = 0;
-    let g9mSv = 0, g9mSh = 0;
-    let g7mSv = 0, g7mSh = 0;
-    let gFbSv = 0, gFbSh = 0;
-    let gBtSv = 0, gBtSh = 0;
-    let gHigh = 0, gMid = 0, gLow = 0;
+
+    const gWing = createPosStat();
+    const g6m = createPosStat();
+    const g9m = createPosStat();
+    const g7m = createPosStat();
+    const gFb = createPosStat();
+    const gBt = createPosStat();
+    const gHigh = createPosStat();
+    const gMid = createPosStat();
+    const gLow = createPosStat();
+
     let gYc = 0, gM2 = 0, gRc = 0, gDr = 0;
 
     matchesToShow.forEach((m: any) => {
       if (isCurrentPlayerGoalie) {
-        const svRaw = m.sv || (m.gs?.startsWith('SV:') ? m.gs.replace('SV:', '') : m.shots ? `${m.goals}/${m.shots}` : '0/0');
-        const svParsed = parseFractionSafe(svRaw);
-        gSv += svParsed.val1;
-        gSvSh += svParsed.val2;
+        // 1. 전체 공식 방어율
+        if (m.rate) {
+          const rNum = parseFloat(String(m.rate).replace('%', ''));
+          if (!isNaN(rNum) && rNum >= 0) {
+            gTotalRateSum += rNum;
+            gTotalRateCount++;
+          }
+        }
+
+        // 2. 전체 세이브 (SV)
+        const svRaw = m.sv || (m.gs?.startsWith('SV:') ? m.gs.replace('SV:', '') : m.shots ? `${m.goals}/${m.shots}` : '');
+        if (svRaw) {
+          const svP = parseGoalieField(svRaw);
+          if (svP) {
+            gTotalSv += svP.sv;
+            if (svP.hasFraction && svP.sh > 0) {
+              gTotalSvSh += svP.sh;
+              gHasSvShFraction = true;
+            }
+          }
+        }
+
+        // 3. 골키퍼 득점 / 어시스트
         gGkg += parseInt(m.gkg) || 0;
         gGkas += parseInt(m.gkas || m.as) || 0;
 
-        const wP = parseFractionSafe(m.wing);
-        gWingSv += wP.val1; gWingSh += wP.val2;
+        // 4. 포지션별 방어율
+        addPosStat(gWing, parseGoalieField(m.wing));
+        addPosStat(g6m, parseGoalieField(m.m6));
+        addPosStat(g9m, parseGoalieField(m.m9));
+        addPosStat(g7m, parseGoalieField(m.m7));
+        addPosStat(gFb, parseGoalieField(m.fb));
+        addPosStat(gBt, parseGoalieField(m.bt));
 
-        const m6P = parseFractionSafe(m.m6);
-        g6mSv += m6P.val1; g6mSh += m6P.val2;
+        // 5. 골 에어리어
+        addPosStat(gHigh, parseGoalieField(m.high));
+        addPosStat(gMid, parseGoalieField(m.mid));
+        addPosStat(gLow, parseGoalieField(m.low));
 
-        const m9P = parseFractionSafe(m.m9);
-        g9mSv += m9P.val1; g9mSh += m9P.val2;
-
-        const m7P = parseFractionSafe(m.m7);
-        g7mSv += m7P.val1; g7mSh += m7P.val2;
-
-        const fbP = parseFractionSafe(m.fb);
-        gFbSv += fbP.val1; gFbSh += fbP.val2;
-
-        const btP = parseFractionSafe(m.bt);
-        gBtSv += btP.val1; gBtSh += btP.val2;
-
-        gHigh += parseInt(m.high) || 0;
-        gMid += parseInt(m.mid) || 0;
-        gLow += parseInt(m.low) || 0;
+        // 6. 징계
         gYc += parseInt(m.yc) || 0;
         gM2 += parseInt(m.m2) || 0;
         gRc += parseInt(m.rc) || 0;
@@ -927,6 +989,33 @@ export default function App() {
     const calcAvg = (num: number) => (num / totalMatchCount).toFixed(1);
     const calcPerMatch = (attempts: number) => `${(attempts / totalMatchCount).toFixed(1)}회`;
 
+    const gOverallAvgRate = gTotalRateCount > 0 
+      ? `${(gTotalRateSum / gTotalRateCount).toFixed(1)}%` 
+      : (gHasSvShFraction && gTotalSvSh > 0 ? `${((gTotalSv / gTotalSvSh) * 100).toFixed(1)}%` : '0.0%');
+
+    const formatGoaliePos = (stat: GoaliePosStat, mode: 'total' | 'avg' | 'rate' | 'perMatch') => {
+      if (mode === 'rate') {
+        if (stat.count > 0) return `${(stat.rateSum / stat.count).toFixed(1)}%`;
+        if (stat.hasFraction && stat.sh > 0) return `${((stat.sv / stat.sh) * 100).toFixed(1)}%`;
+        return '-';
+      }
+      if (mode === 'total') {
+        if (stat.hasFraction) return `${stat.sv}/${stat.sh}`;
+        if (stat.count > 0) return `${(stat.rateSum / stat.count).toFixed(1)}%`;
+        return '-';
+      }
+      if (mode === 'avg') {
+        if (stat.hasFraction) return (stat.sv / totalMatchCount).toFixed(1);
+        if (stat.count > 0) return `${(stat.rateSum / stat.count).toFixed(1)}%`;
+        return '-';
+      }
+      if (mode === 'perMatch') {
+        if (stat.hasFraction) return `${(stat.sh / totalMatchCount).toFixed(1)}회`;
+        return '-';
+      }
+      return '-';
+    };
+
     return (
       <AnimatePresence>
         {showHexagonModal && (
@@ -943,7 +1032,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
                   <span className="text-sm sm:text-base font-black text-slate-800 tracking-tight">
-                    {selectedPlayer} 6각형 통산 기록 분석 차트
+                    {selectedPlayer} 최근{totalMatchCount}경기 분석 차트
                   </span>
                   <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
                     {isCurrentPlayerGoalie ? 'GK 방어율' : '슈팅 성공률'}
@@ -1179,19 +1268,19 @@ export default function App() {
                         {/* 1. 합계 행 */}
                         <tr className="bg-indigo-50/60 font-black text-slate-900 border-b border-indigo-100">
                           <td className="sticky left-0 bg-indigo-100/90 text-indigo-900 border border-gray-200 py-2 px-2.5 font-black text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">합계</td>
-                          <td className="border border-gray-200 py-2 px-2.5 text-emerald-700">{calcRate(gSv, gSvSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2 text-emerald-600">{gSv}/{gSvSh}</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-emerald-700">{gOverallAvgRate}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-emerald-600">{gHasSvShFraction ? `${gTotalSv}/${gTotalSvSh}` : `${gTotalSv}`}</td>
                           <td className="border border-gray-200 py-2 px-2 text-slate-800">{gGkg}</td>
                           <td className="border border-gray-200 py-2 px-2 text-indigo-700">{gGkas}</td>
-                          <td className="border border-gray-200 py-2 px-2">{gWingSv}/{gWingSh}</td>
-                          <td className="border border-gray-200 py-2 px-2">{g6mSv}/{g6mSh}</td>
-                          <td className="border border-gray-200 py-2 px-2">{g9mSv}/{g9mSh}</td>
-                          <td className="border border-gray-200 py-2 px-2">{g7mSv}/{g7mSh}</td>
-                          <td className="border border-gray-200 py-2 px-2">{gFbSv}/{gFbSh}</td>
-                          <td className="border border-gray-200 py-2 px-2">{gBtSv}/{gBtSh}</td>
-                          <td className="border border-gray-200 py-2 px-2">{gHigh}</td>
-                          <td className="border border-gray-200 py-2 px-2">{gMid}</td>
-                          <td className="border border-gray-200 py-2 px-2">{gLow}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gWing, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g6m, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g9m, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g7m, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gFb, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gBt, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gHigh, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gMid, 'total')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gLow, 'total')}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{gYc}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{gM2}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{gRc}</td>
@@ -1201,19 +1290,19 @@ export default function App() {
                         {/* 2. 평균 행 */}
                         <tr className="bg-white hover:bg-slate-50 font-bold text-slate-700 border-b border-gray-100">
                           <td className="sticky left-0 bg-slate-50 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">평균</td>
-                          <td className="border border-gray-200 py-2 px-2.5 text-emerald-700">{calcRate(gSv, gSvSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2 text-emerald-600">{calcAvg(gSv)}</td>
+                          <td className="border border-gray-200 py-2 px-2.5 text-emerald-700">{gOverallAvgRate}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-emerald-600">{calcAvg(gTotalSv)}</td>
                           <td className="border border-gray-200 py-2 px-2">{calcAvg(gGkg)}</td>
                           <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcAvg(gGkas)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gWingSv)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(g6mSv)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(g9mSv)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(g7mSv)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gFbSv)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gBtSv)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gHigh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gMid)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcAvg(gLow)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gWing, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g6m, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g9m, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g7m, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gFb, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gBt, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gHigh, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gMid, 'avg')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gLow, 'avg')}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{calcAvg(gYc)}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{calcAvg(gM2)}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{calcAvg(gRc)}</td>
@@ -1223,19 +1312,19 @@ export default function App() {
                         {/* 3. 성공율(방어율) 행 */}
                         <tr className="bg-emerald-50/40 hover:bg-emerald-50 font-bold text-emerald-800 border-b border-gray-100">
                           <td className="sticky left-0 bg-emerald-100/70 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">방어율</td>
-                          <td className="border border-gray-200 py-2 px-2.5 font-black text-emerald-700">{calcRate(gSv, gSvSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2 font-black">{calcRate(gSv, gSvSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2.5 font-black text-emerald-700">{gOverallAvgRate}</td>
+                          <td className="border border-gray-200 py-2 px-2 font-black">{gOverallAvgRate}</td>
                           <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
                           <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcRate(gWingSv, gWingSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcRate(g6mSv, g6mSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcRate(g9mSv, g9mSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcRate(g7mSv, g7mSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcRate(gFbSv, gFbSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcRate(gBtSv, gBtSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
-                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
-                          <td className="border border-gray-200 py-2 px-2 text-slate-400 font-normal">-</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gWing, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g6m, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g9m, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g7m, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gFb, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gBt, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gHigh, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gMid, 'rate')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gLow, 'rate')}</td>
                           <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
                           <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
                           <td className="border border-gray-200 py-2 px-1.5 text-slate-400 font-normal">-</td>
@@ -1246,18 +1335,18 @@ export default function App() {
                         <tr className="bg-white hover:bg-slate-50 font-bold text-slate-700">
                           <td className="sticky left-0 bg-slate-50 border border-gray-200 py-2 px-2.5 font-bold text-center z-10 shadow-[1px_0_0_rgba(0,0,0,0.08)]">경기당 횟수</td>
                           <td className="border border-gray-200 py-2 px-2.5 text-slate-400 font-normal">-</td>
-                          <td className="border border-gray-200 py-2 px-2 text-slate-800">{calcPerMatch(gSvSh)}</td>
+                          <td className="border border-gray-200 py-2 px-2 text-slate-800">{calcPerMatch(gTotalSv)}</td>
                           <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gGkg)}</td>
                           <td className="border border-gray-200 py-2 px-2 text-indigo-700">{calcPerMatch(gGkas)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gWingSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(g6mSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(g9mSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(g7mSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gFbSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gBtSh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gHigh)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gMid)}</td>
-                          <td className="border border-gray-200 py-2 px-2">{calcPerMatch(gLow)}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gWing, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g6m, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g9m, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(g7m, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gFb, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gBt, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gHigh, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gMid, 'perMatch')}</td>
+                          <td className="border border-gray-200 py-2 px-2">{formatGoaliePos(gLow, 'perMatch')}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(gYc)}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(gM2)}</td>
                           <td className="border border-gray-200 py-2 px-1.5">{calcPerMatch(gRc)}</td>
@@ -2572,8 +2661,12 @@ export default function App() {
               {/* 3. 역대기록 탭: 2단 헤더 테이블, 날짜 sticky 고정, 날짜 클릭 시 양팀 점수 팝업, 헤더 용어설명, 10경기 이상 통합 요약 및 10경기씩 페이지네이션 */}
               {playerModalTab === 'career' && (
                 <div className="space-y-5 animate-in fade-in duration-200">
-                  {/* 통산 요약 통계 (10경기 이상 전체 경기 기록 통합 집계) */}
-                  {(() => {
+                  {playerLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                      <div className="w-9 h-9 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-xs font-bold text-slate-500">선수 역대 경기기록을 불러오는 중입니다...</p>
+                    </div>
+                  ) : (() => {
                     const totalMatches = matchesToShow.length;
                     if (isCurrentPlayerGoalie) {
                       let totalSv = 0;
@@ -3430,20 +3523,40 @@ export default function App() {
     }
   };
 
-  const fetchDetail = async (url: string) => {
+  const fetchDetail = async (url: string, fallbackTournament?: string) => {
     window.history.pushState({ modal: 'matchDetail' }, '');
     const cacheKey = `match_detail_v2_${url}`;
     const cached = localStorage.getItem(cacheKey);
 
+    const resolveTournament = (t?: string) => {
+      const isInvalid = !t || !t.trim() || t.includes('대회 정보 없음') || t.includes('대회정보 없음') || t === 'undefined';
+      if (!isInvalid) return t.trim();
+      if (fallbackTournament && fallbackTournament.trim() && !fallbackTournament.includes('대회 정보 없음') && !fallbackTournament.includes('대회정보 없음')) {
+        return fallbackTournament.trim();
+      }
+      if (data?.tournamentName && data.tournamentName.trim() && !data.tournamentName.includes('대회 정보 없음')) {
+        return data.tournamentName.trim();
+      }
+      return '대한핸드볼협회 공식대회';
+    };
+
     if (cached) {
-      setMatchDetail(JSON.parse(cached));
-      return;
+      try {
+        const parsed = JSON.parse(cached);
+        parsed.tournament = resolveTournament(parsed.tournament);
+        setMatchDetail(parsed);
+        return;
+      } catch (e) {}
     }
 
     setDetailLoading(true);
     try {
       const response = await axios.get(`/api/match-detail?url=${encodeURIComponent(url)}`);
-      const detailWithUrl = { ...response.data, url };
+      const detailWithUrl = { 
+        ...response.data, 
+        url,
+        tournament: resolveTournament(response.data?.tournament)
+      };
       setMatchDetail(detailWithUrl);
       localStorage.setItem(cacheKey, JSON.stringify(detailWithUrl));
     } catch (error) {
@@ -3453,7 +3566,7 @@ export default function App() {
       if (staticMatch) {
         const fallbackDetail = {
           url,
-          tournament: staticMatch.tournament || '대한핸드볼협회 공식대회',
+          tournament: resolveTournament(staticMatch.tournament),
           matchInfo: staticMatch.fullDate || staticMatch.date || '',
           homeTeam: staticMatch.teamA || '',
           awayTeam: staticMatch.teamB || '',
@@ -4269,7 +4382,11 @@ export default function App() {
             <div className="p-6 space-y-6">
               {/* Header */}
               <div className="text-center py-6 bg-gray-50 rounded-2xl mb-4 border border-gray-100 shadow-sm">
-                <div className="text-slate-800 text-lg font-black mb-1">{matchDetail.tournament}</div>
+                <div className="text-slate-800 text-lg font-black mb-1">
+                  {(!matchDetail.tournament || matchDetail.tournament.includes('대회 정보 없음') || matchDetail.tournament.includes('대회정보 없음'))
+                    ? (data?.tournamentName && !data.tournamentName.includes('대회 정보 없음') ? data.tournamentName : '대한핸드볼협회 공식대회')
+                    : matchDetail.tournament}
+                </div>
                 {matchDetail.group && (
                   <div className="inline-block bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full mb-2 uppercase">
                     {matchDetail.group}
@@ -4453,7 +4570,7 @@ export default function App() {
                                   <thead>
                                     {/* 1단 헤더: 대분류 */}
                                     <tr className="bg-slate-50 border-b border-gray-200 text-slate-700 font-bold text-xs">
-                                      <th colSpan={2} className="border border-gray-200 px-3 py-2 text-center">Player</th>
+                                      <th colSpan={2} className="border border-gray-200 px-3 py-2 text-center sticky left-0 z-20 bg-slate-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)]">Player</th>
                                       <th colSpan={8} className="border border-gray-200 px-3 py-2 text-center">Shots</th>
                                       <th colSpan={2} className="border border-gray-200 px-3 py-2 text-center">Offence</th>
                                       <th colSpan={3} className="border border-gray-200 px-3 py-2 text-center">Deffence</th>
@@ -4463,8 +4580,8 @@ export default function App() {
                                     </tr>
                                     {/* 2단 헤더: 소분류 */}
                                     <tr className="bg-slate-50 border-b border-gray-200 text-slate-700 font-bold text-xs">
-                                      <th onClick={(e) => handleOpenTerm('No.', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600">No</th>
-                                      <th onClick={(e) => handleOpenTerm('Name', e)} className="border border-gray-200 px-3 py-1.5 text-center cursor-pointer hover:text-indigo-600">Name</th>
+                                      <th onClick={(e) => handleOpenTerm('No.', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600 sticky left-0 z-20 bg-slate-50 w-10 min-w-[40px] max-w-[40px]">No</th>
+                                      <th onClick={(e) => handleOpenTerm('Name', e)} className="border border-gray-200 px-3 py-1.5 text-center cursor-pointer hover:text-indigo-600 sticky left-10 z-20 bg-slate-50 min-w-[72px] shadow-[2px_0_4px_rgba(0,0,0,0.06)]">Name</th>
                                       <th onClick={(e) => handleOpenTerm('G/S', e)} className="border border-gray-200 px-2.5 py-1.5 text-center cursor-pointer hover:text-indigo-600">G/S</th>
                                       <th onClick={(e) => handleOpenTerm('%', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600">%</th>
                                       <th onClick={(e) => handleOpenTerm('6m', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600">6m</th>
@@ -4486,9 +4603,9 @@ export default function App() {
                                   </thead>
                                   <tbody className="divide-y divide-gray-200 text-slate-800 text-xs">
                                     {fieldPlayers.map((p, i) => (
-                                      <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                        <td className="border border-gray-200 px-2 py-2 text-center text-slate-600 font-bold">{p.no}</td>
-                                        <td className="border border-gray-200 px-3 py-2 text-center font-black text-indigo-600 whitespace-nowrap">
+                                      <tr key={i} className="group hover:bg-slate-50 transition-colors">
+                                        <td className="border border-gray-200 px-2 py-2 text-center text-slate-600 font-bold sticky left-0 z-10 bg-white group-hover:bg-slate-50 w-10 min-w-[40px] max-w-[40px]">{p.no}</td>
+                                        <td className="border border-gray-200 px-3 py-2 text-center font-black text-indigo-600 whitespace-nowrap sticky left-10 z-10 bg-white group-hover:bg-slate-50 min-w-[72px] shadow-[2px_0_4px_rgba(0,0,0,0.06)]">
                                           <button 
                                             onClick={() => fetchPlayerHistory(p.name, t.name, false, false, p)}
                                             className="hover:underline font-black cursor-pointer"
@@ -4541,14 +4658,14 @@ export default function App() {
                                   <table className="w-full text-center border-collapse whitespace-nowrap min-w-max border border-gray-200 text-xs">
                                     <thead>
                                       <tr className="bg-slate-50 border-b border-gray-200 text-slate-700 font-bold text-xs">
-                                        <th colSpan={2} className="border border-gray-200 px-3 py-2 text-center">Goalkeeper</th>
+                                        <th colSpan={2} className="border border-gray-200 px-3 py-2 text-center sticky left-0 z-20 bg-slate-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)]">Goalkeeper</th>
                                         <th colSpan={4} className="border border-gray-200 px-3 py-2 text-center">Saves</th>
                                         <th colSpan={6} className="border border-gray-200 px-3 py-2 text-center">Position Shots</th>
                                         <th colSpan={3} className="border border-gray-200 px-3 py-2 text-center">Goal Area</th>
                                       </tr>
                                       <tr className="bg-slate-50 border-b border-gray-200 text-slate-700 font-bold text-xs">
-                                        <th onClick={(e) => handleOpenTerm('No.', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600">No</th>
-                                        <th onClick={(e) => handleOpenTerm('Name', e)} className="border border-gray-200 px-3 py-1.5 text-center cursor-pointer hover:text-indigo-600">Name</th>
+                                        <th onClick={(e) => handleOpenTerm('No.', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600 sticky left-0 z-20 bg-slate-50 w-10 min-w-[40px] max-w-[40px]">No</th>
+                                        <th onClick={(e) => handleOpenTerm('Name', e)} className="border border-gray-200 px-3 py-1.5 text-center cursor-pointer hover:text-indigo-600 sticky left-10 z-20 bg-slate-50 min-w-[72px] shadow-[2px_0_4px_rgba(0,0,0,0.06)]">Name</th>
                                         <th onClick={(e) => handleOpenTerm('방어율', e)} className="border border-gray-200 px-2.5 py-1.5 text-center cursor-pointer hover:text-indigo-600">방어율</th>
                                         <th onClick={(e) => handleOpenTerm('SV', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600">SV</th>
                                         <th onClick={(e) => handleOpenTerm('GKG', e)} className="border border-gray-200 px-2 py-1.5 text-center cursor-pointer hover:text-indigo-600">GKG</th>
@@ -4566,9 +4683,9 @@ export default function App() {
                                     </thead>
                                     <tbody className="divide-y divide-gray-200 text-slate-800 text-xs">
                                       {goalies.map((p, i) => (
-                                        <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                          <td className="border border-gray-200 px-2 py-2 text-center text-slate-600 font-bold">{p.no}</td>
-                                          <td className="border border-gray-200 px-3 py-2 text-center font-black text-indigo-600 whitespace-nowrap">
+                                        <tr key={i} className="group hover:bg-slate-50 transition-colors">
+                                          <td className="border border-gray-200 px-2 py-2 text-center text-slate-600 font-bold sticky left-0 z-10 bg-white group-hover:bg-slate-50 w-10 min-w-[40px] max-w-[40px]">{p.no}</td>
+                                          <td className="border border-gray-200 px-3 py-2 text-center font-black text-indigo-600 whitespace-nowrap sticky left-10 z-10 bg-white group-hover:bg-slate-50 min-w-[72px] shadow-[2px_0_4px_rgba(0,0,0,0.06)]">
                                             <button 
                                               onClick={() => fetchPlayerHistory(p.name, t.name, false, true, p)}
                                               className="hover:underline font-black cursor-pointer"
@@ -4891,7 +5008,7 @@ export default function App() {
                         <button 
                           onClick={() => {
                             if (match.detailUrl) {
-                              fetchDetail(match.detailUrl);
+                              fetchDetail(match.detailUrl, (match as any).tournament || data?.tournamentName);
                             } else {
                               alert("아직 경기 상세 결과가 등록되지 않았습니다.");
                             }

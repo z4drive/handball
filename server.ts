@@ -227,7 +227,14 @@ async function startServer() {
       });
 
       // Fallbacks with cleaning
-      if (!tournament) tournament = $(".sub_title_area h3").text().trim() || "대회 정보 없음";
+      if (!tournament || tournament === "대회 정보 없음") {
+        tournament = $(".sub_visual .title").text().trim() ||
+                     $(".page_title").text().trim() ||
+                     $(".location li").last().text().trim() ||
+                     $(".title_wrap h2").text().trim() ||
+                     $(".sub_title_area h3").text().trim() ||
+                     "대한핸드볼협회 공식대회";
+      }
       if (!matchDate && infoLines.length > 0) {
         matchDate = infoLines[0].split(/\s+\d+:\d+$/)[0].trim(); // Remove trailing score if present
       }

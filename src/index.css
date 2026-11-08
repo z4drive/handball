@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+html, body {
+  overscroll-behavior-y: none;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
