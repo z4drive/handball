@@ -1793,26 +1793,45 @@ export default function App() {
   };
 
   // 날짜 펼침에서 '경기상세보기' 클릭 시 새창으로 열리는 경기상세 모달
-  const handleOpenPopupDetail = async (url: string) => {
+  const handleOpenPopupDetail = async (url: string, fallbackTournament?: string, fallbackMatchInfo?: string) => {
     if (!url) return;
     setPopupDetailLoading(true);
     setPopupDetailMatch(null);
 
-    // 1. 캐시 확인
-    const cacheKey = `match_detail_v2_${url}`;
+    const isInvalidT = (t?: string) => {
+      const s = (t || '').trim();
+      return !s || s.includes('대회 정보 없음') || s.includes('대회정보 없음') || s === '국내대회 일정/결과' || s === '기타 국내대회 일정/결과' || s === 'undefined' || s === '조회된 대회 없음';
+    };
+
+    const resolveT = (t?: string) => {
+      if (!isInvalidT(t)) return t!.trim();
+      if (!isInvalidT(fallbackTournament)) return fallbackTournament!.trim();
+      return '대한핸드볼협회 공식대회';
+    };
+
+    // 1. 캐시 확인 (v3 캐시 키 사용 및 누락된 날짜/대회명 검증)
+    const cacheKey = `match_detail_v3_${url}`;
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
       try {
-        setPopupDetailMatch(JSON.parse(cached));
-        setPopupDetailLoading(false);
-        return;
+        const parsed = JSON.parse(cached);
+        if (!isInvalidT(parsed.tournament) && parsed.matchInfo) {
+          setPopupDetailMatch(parsed);
+          setPopupDetailLoading(false);
+          return;
+        }
       } catch (e) {}
     }
 
     // 2. API 조회
     try {
       const response = await axios.get(`/api/match-detail?url=${encodeURIComponent(url)}`, { timeout: 15000 });
-      const detailWithUrl = { ...response.data, url };
+      const detailWithUrl = {
+        ...response.data,
+        url,
+        tournament: resolveT(response.data?.tournament),
+        matchInfo: response.data?.matchInfo || fallbackMatchInfo || ''
+      };
       setPopupDetailMatch(detailWithUrl);
       localStorage.setItem(cacheKey, JSON.stringify(detailWithUrl));
       setPopupDetailLoading(false);
@@ -1824,11 +1843,25 @@ export default function App() {
     // 3. 정적 DB 조회 (GitHub Pages 호환)
     const staticDb = await loadStaticKhfDb();
     const staticMatch = staticDb?.matchRecords?.[url];
+    let matchedSchedule: any = null;
+    if (staticDb?.schedules) {
+      for (const arr of Object.values(staticDb.schedules) as any[][]) {
+        const found = arr?.find((item: any) => item.detailUrl === url);
+        if (found) {
+          matchedSchedule = found;
+          break;
+        }
+      }
+    }
     if (staticMatch) {
+      const baseDate = staticMatch.fullDate || staticMatch.date || matchedSchedule?.date || '';
+      const hasTime = /\d{2}:\d{2}/.test(baseDate);
+      const timeStr = matchedSchedule?.time ? ` ${matchedSchedule.time}` : '';
+      const resolvedInfo = hasTime ? baseDate : (baseDate ? `${baseDate}${timeStr}`.trim() : (fallbackMatchInfo || ''));
       const fallbackDetail = {
         url,
-        tournament: staticMatch.tournament || '대한핸드볼협회 공식대회',
-        matchInfo: staticMatch.fullDate || staticMatch.date || '',
+        tournament: !isInvalidT(staticMatch.tournament) ? staticMatch.tournament : resolveT(matchedSchedule?.tournament),
+        matchInfo: resolvedInfo,
         homeTeam: staticMatch.teamA || '',
         awayTeam: staticMatch.teamB || '',
         totalScore: staticMatch.score || 'VS',
@@ -2960,41 +2993,47 @@ export default function App() {
                                           <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.playTime || '00:60:00'}</td>
                                         </tr>
 
-                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 대회정보 밑에 점수 표시 및 경기상세보기 새창 버튼 */}
+                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 대회정보 밑에 점수 표시 및 날짜 오른쪽 경기상세보기 아이콘 */}
                                         {isExpanded && (
                                           <tr className="bg-indigo-50/50 border-b-2 border-indigo-200 animate-in fade-in duration-200">
                                             <td colSpan={19} className="p-2.5 sm:p-3 text-left">
-                                              <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-2">
-                                                {/* 상단 1행: 대회명, 날짜 및 경기상세보기 새창 버튼 */}
-                                                <div className="flex items-center justify-between gap-2 border-b border-indigo-50/80 pb-2">
-                                                  <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] sm:text-xs font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
-                                                      {h.tournament || "공식 전국선수권대회"}
-                                                    </span>
-                                                    <span className="text-[11px] font-bold text-slate-500 font-mono">
-                                                      {h.date || matchDate}
-                                                    </span>
-                                                  </div>
-
-                                                  {h.detailUrl && (
-                                                    <button
-                                                      type="button"
-                                                      onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        handleOpenPopupDetail(h.detailUrl);
-                                                      }}
-                                                      className="text-[10px] sm:text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
-                                                      title="새창으로 경기상세보기 열기"
-                                                    >
-                                                      <span>경기상세보기</span>
-                                                      <span className="text-[9px]">↗</span>
-                                                    </button>
-                                                  )}
+                                              <div className="sticky left-2.5 w-[calc(100vw-3.5rem)] max-w-md bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-2">
+                                                {/* 클릭 이벤트 안내 설명 */}
+                                                <div className="text-[10px] font-bold text-indigo-700 bg-indigo-50/80 px-2 py-1 rounded-md">
+                                                  💡 날짜 오른쪽 경기상세보기 아이콘을 클릭하면 새창으로 경기 세부기록이 열립니다.
                                                 </div>
 
-                                                {/* 대회명 바로 밑 2행: 팀점수 표시 */}
-                                                <div className="flex items-center gap-2 pt-0.5">
+                                                {/* 상단: 대회명 및 날짜 + 날짜 오른쪽 경기상세보기 아이콘 */}
+                                                <div className="flex flex-col gap-1.5 border-b border-indigo-50/80 pb-2">
+                                                  <div>
+                                                    <span className="inline-block text-[10px] sm:text-xs font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md break-keep">
+                                                      {h.tournament || "공식 전국선수권대회"}
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center flex-wrap gap-2">
+                                                    <span className="text-[11px] font-bold text-slate-600 font-mono">
+                                                      {h.date || matchDate}
+                                                    </span>
+                                                    {h.detailUrl && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
+                                                          handleOpenPopupDetail(h.detailUrl, h.tournament, h.date || matchDate);
+                                                        }}
+                                                        className="text-[10px] sm:text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-0.5 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 active:scale-95 shadow-xs shrink-0"
+                                                        title="새창으로 경기상세보기 열기"
+                                                      >
+                                                        <ExternalLink className="w-3 h-3" />
+                                                        <span>경기상세보기</span>
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+
+                                                {/* 대회명 바로 밑: 팀점수 표시 */}
+                                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                                                   <span className="text-xs sm:text-sm font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
                                                   <span className={`text-sm sm:text-base font-black px-1.5 py-0.5 rounded ${scoreA > scoreB ? 'text-red-600 bg-red-50' : 'text-slate-700 bg-slate-100'}`}>
                                                     {scoreParts[0]?.trim() || '0'}
@@ -3144,41 +3183,47 @@ export default function App() {
                                           <td onClick={onRowRecordClick} title="클릭하여 해당일 6각형 분석차트 새창 열기" className="border border-gray-200 py-2 px-2 font-mono text-[11px] text-slate-500 cursor-pointer hover:bg-indigo-50/70 transition-colors">{h.playTime || '00:60:00'}</td>
                                         </tr>
 
-                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 대회정보 밑에 점수 표시 및 경기상세보기 새창 버튼 */}
+                                        {/* 날짜 클릭 시 바로 하단에 펼쳐지는 대회정보 밑에 점수 표시 및 날짜 오른쪽 경기상세보기 아이콘 */}
                                         {isExpanded && (
                                           <tr className="bg-indigo-50/50 border-b-2 border-indigo-200 animate-in fade-in duration-200">
                                             <td colSpan={20} className="p-2.5 sm:p-3 text-left">
-                                              <div className="bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-2">
-                                                {/* 상단 1행: 대회명, 날짜 및 경기상세보기 새창 버튼 */}
-                                                <div className="flex items-center justify-between gap-2 border-b border-indigo-50/80 pb-2">
-                                                  <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] sm:text-xs font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
-                                                      {h.tournament || "공식 전국선수권대회"}
-                                                    </span>
-                                                    <span className="text-[11px] font-bold text-slate-500 font-mono">
-                                                      {h.date || matchDate}
-                                                    </span>
-                                                  </div>
-
-                                                  {h.detailUrl && (
-                                                    <button
-                                                      type="button"
-                                                      onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        handleOpenPopupDetail(h.detailUrl);
-                                                      }}
-                                                      className="text-[10px] sm:text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
-                                                      title="새창으로 경기상세보기 열기"
-                                                    >
-                                                      <span>경기상세보기</span>
-                                                      <span className="text-[9px]">↗</span>
-                                                    </button>
-                                                  )}
+                                              <div className="sticky left-2.5 w-[calc(100vw-3.5rem)] max-w-md bg-white p-3 rounded-xl border border-indigo-100 shadow-xs space-y-2">
+                                                {/* 클릭 이벤트 안내 설명 */}
+                                                <div className="text-[10px] font-bold text-indigo-700 bg-indigo-50/80 px-2 py-1 rounded-md">
+                                                  💡 날짜 오른쪽 경기상세보기 아이콘을 클릭하면 새창으로 경기 세부기록이 열립니다.
                                                 </div>
 
-                                                {/* 대회명 바로 밑 2행: 팀점수 표시 */}
-                                                <div className="flex items-center gap-2 pt-0.5">
+                                                {/* 상단: 대회명 및 날짜 + 날짜 오른쪽 경기상세보기 아이콘 */}
+                                                <div className="flex flex-col gap-1.5 border-b border-indigo-50/80 pb-2">
+                                                  <div>
+                                                    <span className="inline-block text-[10px] sm:text-xs font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md break-keep">
+                                                      {h.tournament || "공식 전국선수권대회"}
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center flex-wrap gap-2">
+                                                    <span className="text-[11px] font-bold text-slate-600 font-mono">
+                                                      {h.date || matchDate}
+                                                    </span>
+                                                    {h.detailUrl && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
+                                                          handleOpenPopupDetail(h.detailUrl, h.tournament, h.date || matchDate);
+                                                        }}
+                                                        className="text-[10px] sm:text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-0.5 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 active:scale-95 shadow-xs shrink-0"
+                                                        title="새창으로 경기상세보기 열기"
+                                                      >
+                                                        <ExternalLink className="w-3 h-3" />
+                                                        <span>경기상세보기</span>
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+
+                                                {/* 대회명 바로 밑: 팀점수 표시 */}
+                                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                                                   <span className="text-xs sm:text-sm font-black text-slate-800">{formatSchoolName(h.teamA)}</span>
                                                   <span className={`text-sm sm:text-base font-black px-1.5 py-0.5 rounded ${scoreA > scoreB ? 'text-red-600 bg-red-50' : 'text-slate-700 bg-slate-100'}`}>
                                                     {scoreParts[0]?.trim() || '0'}
@@ -3523,29 +3568,51 @@ export default function App() {
     }
   };
 
-  const fetchDetail = async (url: string, fallbackTournament?: string) => {
+  const fetchDetail = async (url: string, fallbackTournament?: string, fallbackMatchInfo?: string) => {
     window.history.pushState({ modal: 'matchDetail' }, '');
-    const cacheKey = `match_detail_v2_${url}`;
+    const cacheKey = `match_detail_v3_${url}`;
     const cached = localStorage.getItem(cacheKey);
 
-    const resolveTournament = (t?: string) => {
-      const isInvalid = !t || !t.trim() || t.includes('대회 정보 없음') || t.includes('대회정보 없음') || t === 'undefined';
-      if (!isInvalid) return t.trim();
-      if (fallbackTournament && fallbackTournament.trim() && !fallbackTournament.includes('대회 정보 없음') && !fallbackTournament.includes('대회정보 없음')) {
-        return fallbackTournament.trim();
-      }
-      if (data?.tournamentName && data.tournamentName.trim() && !data.tournamentName.includes('대회 정보 없음')) {
-        return data.tournamentName.trim();
-      }
+    const isInvalidT = (t?: string) => {
+      const s = (t || '').trim();
+      return !s ||
+        s.includes('대회 정보 없음') ||
+        s.includes('대회정보 없음') ||
+        s === '국내대회 일정/결과' ||
+        s === '기타 국내대회 일정/결과' ||
+        s === '조회된 대회 없음' ||
+        s === 'undefined';
+    };
+
+    const scheduleMatch = data?.matches?.find(m => m.detailUrl === url);
+
+    const resolveTournament = (t?: string, extraTournament?: string) => {
+      if (!isInvalidT(t)) return t!.trim();
+      if (!isInvalidT(extraTournament)) return extraTournament!.trim();
+      if (!isInvalidT(fallbackTournament)) return fallbackTournament!.trim();
+      if (!isInvalidT((scheduleMatch as any)?.tournament)) return ((scheduleMatch as any).tournament as string).trim();
+      if (!isInvalidT(data?.tournamentName)) return data!.tournamentName.trim();
       return '대한핸드볼협회 공식대회';
+    };
+
+    const resolveMatchInfo = (info?: string, extraInfo?: string) => {
+      const candidate = (info || '').trim();
+      if (candidate && /\d{2}:\d{2}/.test(candidate)) return candidate;
+      if (extraInfo && /\d{2}:\d{2}/.test(extraInfo)) return extraInfo.trim();
+      if (fallbackMatchInfo && /\d{2}:\d{2}/.test(fallbackMatchInfo)) return fallbackMatchInfo.trim();
+      if (scheduleMatch?.date && /\d{2}:\d{2}/.test(scheduleMatch.date)) return scheduleMatch.date.trim();
+      return candidate || extraInfo || fallbackMatchInfo || scheduleMatch?.date || '';
     };
 
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        parsed.tournament = resolveTournament(parsed.tournament);
-        setMatchDetail(parsed);
-        return;
+        if (!isInvalidT(parsed.tournament) && parsed.matchInfo) {
+          parsed.tournament = resolveTournament(parsed.tournament);
+          parsed.matchInfo = resolveMatchInfo(parsed.matchInfo);
+          setMatchDetail(parsed);
+          return;
+        }
       } catch (e) {}
     }
 
@@ -3555,7 +3622,8 @@ export default function App() {
       const detailWithUrl = { 
         ...response.data, 
         url,
-        tournament: resolveTournament(response.data?.tournament)
+        tournament: resolveTournament(response.data?.tournament),
+        matchInfo: resolveMatchInfo(response.data?.matchInfo)
       };
       setMatchDetail(detailWithUrl);
       localStorage.setItem(cacheKey, JSON.stringify(detailWithUrl));
@@ -3563,11 +3631,27 @@ export default function App() {
       console.warn("API match-detail failed, checking static KHF DB:", error);
       const staticDb = await loadStaticKhfDb();
       const staticMatch = staticDb?.matchRecords?.[url];
+      let matchedSchedule: any = null;
+      if (staticDb?.schedules) {
+        for (const arr of Object.values(staticDb.schedules) as any[][]) {
+          const found = arr?.find((item: any) => item.detailUrl === url);
+          if (found) {
+            matchedSchedule = found;
+            break;
+          }
+        }
+      }
+      const schedInfo = matchedSchedule ? `${matchedSchedule.date || matchedSchedule.cleanDate || ''} ${matchedSchedule.time || ''}`.trim() : '';
+
       if (staticMatch) {
+        const baseInfo = staticMatch.fullDate || staticMatch.date || '';
+        const mergedInfo = /\d{2}:\d{2}/.test(baseInfo)
+          ? baseInfo
+          : (schedInfo || resolveMatchInfo(baseInfo));
         const fallbackDetail = {
           url,
-          tournament: resolveTournament(staticMatch.tournament),
-          matchInfo: staticMatch.fullDate || staticMatch.date || '',
+          tournament: resolveTournament(staticMatch.tournament, matchedSchedule?.tournament),
+          matchInfo: mergedInfo,
           homeTeam: staticMatch.teamA || '',
           awayTeam: staticMatch.teamB || '',
           totalScore: staticMatch.score || 'VS',
@@ -3581,6 +3665,74 @@ export default function App() {
         };
         setMatchDetail(fallbackDetail);
         localStorage.setItem(cacheKey, JSON.stringify(fallbackDetail));
+      } else {
+        // GitHub Pages에서 staticDb에 없는 최신 경기인 경우 외부 프록시로 상세 HTML 직접 파싱
+        const proxyUrls = [
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          `https://corsproxy.io/?url=${encodeURIComponent(url)}`
+        ];
+        for (const pUrl of proxyUrls) {
+          try {
+            const pRes = await axios.get(pUrl, { timeout: 12000 });
+            if (typeof pRes.data === 'string' && pRes.data.includes('vs_style')) {
+              const doc = new DOMParser().parseFromString(pRes.data, 'text/html');
+              let pDate = '';
+              let pTourn = '';
+              let pGroup = '';
+              doc.querySelectorAll('.compare_top .txt_center p').forEach((pEl) => {
+                const txt = pEl.textContent?.replace(/\s+/g, ' ').trim() || '';
+                if (!txt) return;
+                if (/\d{4}[.-]\d{2}[.-]\d{2}/.test(txt)) pDate = txt;
+                else if (!pTourn && !isInvalidT(txt)) pTourn = txt;
+                else if (!pGroup) pGroup = txt;
+              });
+              const hName = doc.querySelector('.vs_style.main .team.home .name')?.textContent?.replace(/전반전|후반전|\(\d+-\d+\)|\d+/g, '').trim() || scheduleMatch?.teamA || '';
+              const aName = doc.querySelector('.vs_style.main .team.away .name')?.textContent?.replace(/전반전|후반전|\(\d+-\d+\)|\d+/g, '').trim() || scheduleMatch?.teamB || '';
+              const hScore = doc.querySelector('.vs_style.main .team.home .number')?.textContent?.trim() || '';
+              const aScore = doc.querySelector('.vs_style.main .team.away .number')?.textContent?.trim() || '';
+              const periodScores: any[] = [];
+              doc.querySelectorAll('.vs_style.sub').forEach((div) => {
+                const label = div.querySelector('.center')?.textContent?.trim() || '';
+                const home = div.querySelector('.team.home .name')?.textContent?.trim() || '';
+                const away = div.querySelector('.team.away .name')?.textContent?.trim() || '';
+                if (label && home && away) periodScores.push({ label, home, away });
+              });
+              const tableStats: any[] = [];
+              doc.querySelectorAll('.compare_table table tbody tr').forEach((tr) => {
+                const tds = tr.querySelectorAll('td');
+                const home = tds[0]?.textContent?.trim() || '';
+                const label = tr.querySelector('.center')?.textContent?.trim() || '';
+                const away = tds[tds.length - 1]?.textContent?.trim() || '';
+                if (label) tableStats.push({ label, home, away });
+              });
+              const compareBars: any[] = [];
+              doc.querySelectorAll('.compare_bar li').forEach((li) => {
+                const home = li.querySelector('.team.home .number')?.textContent?.trim() || '';
+                const away = li.querySelector('.team.away .number')?.textContent?.trim() || '';
+                const label = li.querySelector('.center')?.textContent?.trim() || '';
+                if (label) compareBars.push({ label, home, away });
+              });
+              const proxiedDetail = {
+                url,
+                tournament: resolveTournament(pTourn, matchedSchedule?.tournament),
+                matchInfo: resolveMatchInfo(pDate, schedInfo),
+                homeTeam: hName,
+                awayTeam: aName,
+                totalScore: hScore && aScore ? `${hScore} : ${aScore}` : (scheduleMatch?.score || 'VS'),
+                periodScores,
+                homeIcons: {},
+                awayIcons: {},
+                tableStats,
+                playerRecords: { home: [], away: [] },
+                compareBars,
+                group: pGroup
+              };
+              setMatchDetail(proxiedDetail);
+              localStorage.setItem(cacheKey, JSON.stringify(proxiedDetail));
+              break;
+            }
+          } catch (proxyErr) {}
+        }
       }
     } finally {
       setDetailLoading(false);
@@ -3596,7 +3748,7 @@ export default function App() {
         const k = localStorage.key(i);
         if (k && (k.startsWith('player_saved_') || k.startsWith('player_history_')) && !k.includes('_v99_')) {
           keysToRemove.push(k);
-        } else if (k && k.startsWith('match_detail_') && !k.startsWith('match_detail_v2_')) {
+        } else if (k && k.startsWith('match_detail_') && !k.startsWith('match_detail_v3_')) {
           keysToRemove.push(k);
         }
       }
@@ -4380,19 +4532,23 @@ export default function App() {
             </div>
           ) : matchDetail && (
             <div className="p-6 space-y-6">
-              {/* Header */}
-              <div className="text-center py-6 bg-gray-50 rounded-2xl mb-4 border border-gray-100 shadow-sm">
-                <div className="text-slate-800 text-lg font-black mb-1">
-                  {(!matchDetail.tournament || matchDetail.tournament.includes('대회 정보 없음') || matchDetail.tournament.includes('대회정보 없음'))
-                    ? (data?.tournamentName && !data.tournamentName.includes('대회 정보 없음') ? data.tournamentName : '대한핸드볼협회 공식대회')
+              {/* Header (KHF 공식 사이트와 동일하게 날짜·시간 / 대회명 / 조 순서로 표시) */}
+              <div className="text-center py-5 px-4 bg-gray-50 rounded-2xl mb-4 border border-gray-100 shadow-sm space-y-1.5">
+                {matchDetail.matchInfo && (
+                  <div className="text-slate-500 text-xs sm:text-sm font-bold tracking-tight">
+                    {matchDetail.matchInfo}
+                  </div>
+                )}
+                <div className="text-slate-900 text-lg font-black leading-snug break-keep">
+                  {(!matchDetail.tournament || matchDetail.tournament.includes('대회 정보 없음') || matchDetail.tournament.includes('대회정보 없음') || matchDetail.tournament === '국내대회 일정/결과' || matchDetail.tournament === '기타 국내대회 일정/결과')
+                    ? (data?.tournamentName && !data.tournamentName.includes('대회 정보 없음') && data.tournamentName !== '조회된 대회 없음' ? data.tournamentName : '대한핸드볼협회 공식대회')
                     : matchDetail.tournament}
                 </div>
                 {matchDetail.group && (
-                  <div className="inline-block bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full mb-2 uppercase">
+                  <div className="inline-block bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1 rounded-full uppercase">
                     {matchDetail.group}
                   </div>
                 )}
-                <div className="text-gray-400 text-sm font-medium">{matchDetail.matchInfo}</div>
               </div>
 
               {/* Professional Scoreboard (grid 1fr auto 1fr로 긴 학교명이어도 전반전/후반전 완벽한 가운데 정렬) */}
@@ -4516,24 +4672,25 @@ export default function App() {
                     ))}
                   </div>
 
-                  {/* Detailed Team Stats */}
+                  {/* 팀별 세부 기록 (한글 제목, 시인성 강화된 용어 버튼, 글자에 맞춘 타이트한 위아래 간격) */}
                   <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-                    <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">Detailed Team Stats</span>
+                    <div className="bg-slate-900 px-5 py-2.5 flex justify-between items-center">
+                      <span className="text-xs font-black text-white tracking-tight">팀별 세부 기록</span>
+                      <span className="text-[10px] font-bold text-indigo-300">용어 클릭 시 설명 새창</span>
                     </div>
-                    <div className="divide-y divide-gray-50">
+                    <div className="divide-y divide-gray-100">
                       {matchDetail.tableStats.map((stat, i) => (
-                        <div key={i} className="flex items-center px-6 py-4 hover:bg-slate-50 transition-colors">
-                          <div className="w-1/3 text-sm font-black text-slate-800">{stat.home}</div>
+                        <div key={i} className="flex items-center px-5 py-2 hover:bg-slate-50 transition-colors">
+                          <div className="w-1/3 text-sm font-black text-slate-800 leading-tight">{stat.home}</div>
                           <div className="w-1/3 text-center">
                             <button 
                               onClick={(e) => handleOpenTerm(stat.label, e)}
-                              className="text-[10px] font-black text-gray-400 bg-gray-50 px-3 py-1 rounded-full uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                              className="text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-0.5 rounded-full uppercase hover:bg-indigo-100 hover:text-indigo-800 transition-colors cursor-pointer leading-tight"
                             >
                               {stat.label}
                             </button>
                           </div>
-                          <div className="w-1/3 text-right text-sm font-black text-slate-800">{stat.away}</div>
+                          <div className="w-1/3 text-right text-sm font-black text-slate-800 leading-tight">{stat.away}</div>
                         </div>
                       ))}
                     </div>
@@ -5008,7 +5165,7 @@ export default function App() {
                         <button 
                           onClick={() => {
                             if (match.detailUrl) {
-                              fetchDetail(match.detailUrl, (match as any).tournament || data?.tournamentName);
+                              fetchDetail(match.detailUrl, (match as any).tournament || data?.tournamentName, match.date);
                             } else {
                               alert("아직 경기 상세 결과가 등록되지 않았습니다.");
                             }

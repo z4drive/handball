@@ -200,46 +200,86 @@ async function startServer() {
 
       const $ = cheerio.load(response.data);
       
-      const infoHtml = $(".game_info_top").html() || "";
-      const infoLines = infoHtml.split(/<br\s*\/?>/i).map(line => cheerio.load(line)("body").text().trim());
-      
       let matchDate = "";
       let tournament = "";
       let group = "";
-      
-      // Look for Date (YYYY.MM.DD), Day (요일), and Time (HH:mm)
-      const datePartMatch = infoHtml.match(/\d{4}[.-]\d{2}[.-]\d{2}/);
-      const dayPartMatch = infoHtml.match(/\([^)]+\)/);
-      const timePartMatch = infoHtml.match(/([012]\d:[0-5]\d)/);
 
-      if (datePartMatch) {
-        matchDate = datePartMatch[0];
-        if (dayPartMatch) matchDate += ` ${dayPartMatch[0]}`;
-        if (timePartMatch) matchDate += ` ${timePartMatch[1]}`;
+      const isInvalidTournamentName = (name: string) => {
+        const t = name.trim();
+        return !t ||
+          t.includes("대회 정보 없음") ||
+          t.includes("대회정보 없음") ||
+          t === "국내대회 일정/결과" ||
+          t === "기타 국내대회 일정/결과" ||
+          t === "용어설명";
+      };
+
+      // 1. KHF detail_new.php 실제 상단 구조: .compare_top .txt_center p (날짜·시간 / 대회명 / 조·라운드)
+      const txtCenterPs = $(".compare_top .txt_center p");
+      if (txtCenterPs.length > 0) {
+        txtCenterPs.each((_, pEl) => {
+          const line = $(pEl).text().replace(/\s+/g, " ").trim();
+          if (!line) return;
+          if (/\d{4}[.-]\d{2}[.-]\d{2}/.test(line)) {
+            matchDate = line;
+          } else if (!tournament && !isInvalidTournamentName(line)) {
+            tournament = line;
+          } else if (!group) {
+            group = line;
+          }
+        });
       }
 
-      infoLines.forEach(line => {
-        if (line.includes("대회")) {
-          tournament = line;
-        } else if (line.includes("조") && !line.includes("보조")) {
-          group = line;
+      // 2. 구형 또는 예외 페이지 폴백: .game_info_top
+      if (!matchDate || !tournament) {
+        const infoHtml = $(".game_info_top").html() || "";
+        if (infoHtml) {
+          const infoLines = infoHtml
+            .split(/<br\s*\/?>/i)
+            .map(line => cheerio.load(line)("body").text().replace(/\s+/g, " ").trim())
+            .filter(Boolean);
+
+          const datePartMatch = infoHtml.match(/\d{4}[.-]\d{2}[.-]\d{2}/);
+          const dayPartMatch = infoHtml.match(/\([^)]+\)/);
+          const timePartMatch = infoHtml.match(/([012]\d:[0-5]\d)/);
+
+          if (!matchDate && datePartMatch) {
+            matchDate = datePartMatch[0];
+            if (dayPartMatch) matchDate += ` ${dayPartMatch[0]}`;
+            if (timePartMatch) matchDate += ` ${timePartMatch[1]}`;
+          }
+
+          infoLines.forEach(line => {
+            if (/\d{4}[.-]\d{2}[.-]\d{2}/.test(line)) {
+              if (!matchDate) matchDate = line;
+            } else if (!tournament && !isInvalidTournamentName(line) && !/^\d+조$|^\d+강$|결승|준결승|예선|본선/.test(line)) {
+              tournament = line;
+            } else if (!group) {
+              group = line;
+            }
+          });
+
+          if (!matchDate && infoLines.length > 0) {
+            matchDate = infoLines[0].split(/\s+\d+:\d+$/)[0].trim();
+          }
+          if (!group && infoLines.length > 2) group = infoLines[2];
         }
-      });
+      }
 
-      // Fallbacks with cleaning
-      if (!tournament || tournament === "대회 정보 없음") {
-        tournament = $(".sub_visual .title").text().trim() ||
-                     $(".page_title").text().trim() ||
-                     $(".location li").last().text().trim() ||
-                     $(".title_wrap h2").text().trim() ||
-                     $(".sub_title_area h3").text().trim() ||
-                     "대한핸드볼협회 공식대회";
+      // 3. 추가 셀렉터 폴백 (브레드크럼/메뉴명 제외)
+      if (isInvalidTournamentName(tournament)) {
+        const candidates = [
+          $(".sub_title_area h3").text().trim(),
+          $(".game_title").text().trim(),
+          $(".match_title").text().trim(),
+          $(".sub_visual .title").text().trim(),
+          $(".page_title").text().trim(),
+          $(".title_wrap h2").text().trim()
+        ];
+        const validCandidate = candidates.find(c => !isInvalidTournamentName(c));
+        tournament = validCandidate || "대한핸드볼협회 공식대회";
       }
-      if (!matchDate && infoLines.length > 0) {
-        matchDate = infoLines[0].split(/\s+\d+:\d+$/)[0].trim(); // Remove trailing score if present
-      }
-      if (!group && infoLines.length > 2) group = infoLines[2];
-      
+
       const matchInfo = matchDate;
       
       // Main scores and teams
