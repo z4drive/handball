@@ -8,26 +8,34 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['icon-512.png'],
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
       },
       manifest: {
+        id: '/',
         name: 'HandballHub',
         short_name: 'Handball',
         description: 'Handball match details app',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        background_color: '#ffffff',
         theme_color: '#ffffff',
         icons: [
           {
-            src: '/handball_icon.png',
+            src: '/icon-512.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
-            src: '/handball_icon.png',
+            src: '/icon-512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           }
         ]
       }
