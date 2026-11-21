@@ -8,7 +8,7 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-512.png'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
@@ -26,7 +26,7 @@ export default defineConfig(() => {
         theme_color: '#ffffff',
         icons: [
           {
-            src: '/icon-512.png',
+            src: '/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
